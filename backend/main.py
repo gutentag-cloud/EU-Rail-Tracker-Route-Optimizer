@@ -15,7 +15,7 @@ from pathlib import Path
 from .config import settings
 from .models import GraphStats, HealthCheck
 from .api_client import get_client, close_all_clients, PROFILES
-from .station_store import StationStore
+from .station_store import StationStore, haversine
 from .optimizer import RailwayGraph
 from .timetable import TimetableGraph
 from .overpass import overpass
@@ -49,8 +49,19 @@ async def lifespan(app: FastAPI):
     await db.connect()
 
     async def fetch_trains(stop_id):
-        client = get_client(settings.default_operator)
-        return await client.get_live_trains(stop_id, duration=30)
+        client = get_client("db")
+        deps = await client.get_departures(stop_id, duration=15)
+        now = datetime.now(timezone.utc)
+        positions = []
+        for dep in deps[:4]:
+            if not dep.trip_id:
+                continue
+            trip = await client.get_trip(dep.trip_id)
+            if trip:
+                pos = client.interpolate(trip, now)
+                if pos:
+                    positions.append(pos)
+        return positions
 
     task = asyncio.create_task(train_broadcast_loop(fetch_trains))
     yield
@@ -83,12 +94,11 @@ async def service_worker():
 # ── operators ─────────────────────────────────────────
 @app.get("/api/operators")
 async def list_operators():
-    return {k: {"name": v["name"], "status": v.get("status", "unknown"),
-                "has_radar": v.get("has_radar", False)}
+    return {k: {"name": v["name"], "status": v.get("status", "unknown")}
             for k, v in PROFILES.items()}
 
 
-# ── station search (autocomplete) ─────────────────────
+# ── autocomplete station search ───────────────────────
 @app.get("/api/stations/search")
 async def search_stations(
     q: str = Query(..., min_length=1),
@@ -111,11 +121,9 @@ async def search_stations(
     return local
 
 @app.get("/api/stations/nearby")
-async def nearby_stations(
-    lat: float, lon: float,
-    radius: float = Query(50, le=200),
-    limit: int = Query(20, le=100),
-):
+async def nearby_stations(lat: float, lon: float,
+                          radius: float = Query(50, le=200),
+                          limit: int = Query(20, le=100)):
     return store.nearby(lat, lon, radius_km=radius, limit=limit)
 
 @app.get("/api/stations/main")
@@ -123,58 +131,105 @@ async def main_stations(country: str | None = None):
     return store.main_stations(country=country)
 
 
-# ── RADAR — all trains in bounding box ────────────────
+# ══════════════════════════════════════════════════════
+#  LIVE TRAINS — radar with station-based fallback
+# ══════════════════════════════════════════════════════
+
 @app.get("/api/radar")
 async def radar(
-    north: float = Query(...),
-    south: float = Query(...),
-    east: float = Query(...),
-    west: float = Query(...),
-    duration: int = Query(30, le=60),
+    north: float = Query(...), south: float = Query(...),
+    east: float = Query(...), west: float = Query(...),
 ):
-    """Get all trains in viewport. Uses DB transport.rest radar."""
-    bbox_lat = north - south
-    bbox_lon = east - west
-    if bbox_lat > 8.0 or bbox_lon > 12.0:
-        return []  # too zoomed out, return empty
+    """Get live trains in viewport. Tries radar API, falls back to station-based."""
+    if north - south > 8.0 or east - west > 12.0:
+        return {"trains": [], "source": "none", "message": "Zoom in more"}
 
-    try:
-        client = get_client("db")
-        positions = await client.get_radar(north, south, east, west, duration)
+    # Strategy 1: Try DB radar API
+    client = get_client("db")
+    trains = await client.try_radar(north, south, east, west)
+    if trains:
+        return {"trains": [t.model_dump() for t in trains],
+                "source": "radar", "count": len(trains)}
 
-        # record delays from nearby stations while we're at it
-        return positions
-    except Exception as e:
-        log.warning(f"Radar error: {e}")
+    # Strategy 2: Station-based interpolation
+    trains = await _station_based_trains(north, south, east, west)
+    return {"trains": trains, "source": "stations",
+            "count": len(trains)}
+
+
+async def _station_based_trains(north: float, south: float,
+                                east: float, west: float) -> list[dict]:
+    """Find trains by checking departures from stations in the viewport."""
+    center_lat = (north + south) / 2
+    center_lon = (east + west) / 2
+    radius_km = haversine(south, west, north, east) / 2
+    radius_km = min(radius_km, 200)
+
+    # Find main stations in viewport
+    nearby = store.nearby(center_lat, center_lon,
+                          radius_km=radius_km, limit=40)
+    main_only = [s for s in nearby
+                 if s.is_main and
+                 south <= s.coords.latitude <= north and
+                 west <= s.coords.longitude <= east][:8]
+
+    if not main_only:
+        main_only = [s for s in nearby
+                     if south <= s.coords.latitude <= north and
+                     west <= s.coords.longitude <= east][:5]
+
+    if not main_only:
         return []
 
+    client = get_client("db")
+    now = datetime.now(timezone.utc)
 
-# ── departures ────────────────────────────────────────
-@app.get("/api/departures/{stop_id}")
-async def departures(
-    stop_id: str,
-    duration: int = Query(30, le=120),
-    operator: str = Query("db"),
-):
-    try:
-        client = get_client(operator)
-        deps = await client.get_departures(stop_id, duration)
-        delay_tracker.record_from_departures(deps)
-        return deps
-    except Exception as e:
-        raise HTTPException(502, detail=str(e))
+    async def get_trains_from_station(station):
+        """Fetch departures from a station and interpolate train positions."""
+        results = []
+        try:
+            stop_id = station.db_id or station.id
+            deps = await client.get_departures(stop_id, duration=20)
+
+            for dep in deps[:4]:
+                if not dep.trip_id:
+                    continue
+                try:
+                    trip = await client.get_trip(dep.trip_id)
+                    if not trip or len(trip.stopovers) < 2:
+                        continue
+                    pos = client.interpolate(trip, now)
+                    if pos and south <= pos.coords.latitude <= north \
+                           and west <= pos.coords.longitude <= east:
+                        results.append(pos.model_dump())
+                except Exception:
+                    continue
+        except Exception as e:
+            log.debug(f"Station trains error {station.name}: {e}")
+        return results
+
+    # Fetch concurrently
+    all_results = await asyncio.gather(
+        *[get_trains_from_station(s) for s in main_only],
+        return_exceptions=True,
+    )
+
+    # Flatten and deduplicate
+    seen = set()
+    trains = []
+    for result in all_results:
+        if isinstance(result, Exception):
+            continue
+        for t in result:
+            tid = t.get("trip_id", "")
+            if tid and tid not in seen:
+                seen.add(tid)
+                trains.append(t)
+
+    return trains
 
 
-@app.get("/api/trains/live/{stop_id}")
-async def live_trains(stop_id: str, operator: str = Query("db")):
-    try:
-        client = get_client(operator)
-        return await client.get_live_trains(stop_id, duration=30)
-    except Exception as e:
-        log.warning(f"Live trains error: {e}")
-        return []
-
-
+# ── trip details ──────────────────────────────────────
 @app.get("/api/trip/{trip_id:path}")
 async def trip_details(trip_id: str, operator: str = Query("db")):
     client = get_client(operator)
@@ -185,19 +240,45 @@ async def trip_details(trip_id: str, operator: str = Query("db")):
     return trip
 
 
-@app.get("/api/journeys")
-async def journeys(
-    from_id: str = Query(...), to_id: str = Query(...),
-    results: int = Query(3, le=6), operator: str = Query("db"),
-):
+# ── departures ────────────────────────────────────────
+@app.get("/api/departures/{stop_id}")
+async def departures(stop_id: str,
+                     duration: int = Query(30, le=120),
+                     operator: str = Query("db")):
     try:
         client = get_client(operator)
-        return await client.search_journeys(from_id, to_id, results)
+        deps = await client.get_departures(stop_id, duration)
+        delay_tracker.record_from_departures(deps)
+        return deps
     except Exception as e:
         raise HTTPException(502, detail=str(e))
 
 
-# ── route optimizer ───────────────────────────────────
+# ══════════════════════════════════════════════════════
+#  REAL JOURNEY SEARCH (timetable-based routing)
+# ══════════════════════════════════════════════════════
+
+@app.get("/api/journey/search")
+async def journey_search(
+    from_id: str = Query(..., description="Origin station ID (from autocomplete)"),
+    to_id: str = Query(..., description="Destination station ID"),
+    results: int = Query(5, le=8),
+    operator: str = Query("db"),
+):
+    """Search real train connections using operator timetable APIs."""
+    try:
+        client = get_client(operator)
+        journeys = await client.search_journeys(from_id, to_id, results)
+        if not journeys:
+            raise HTTPException(404, "No connections found")
+        return {"journeys": journeys, "operator": operator}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, detail=str(e))
+
+
+# ── graph-based route optimizer (educational) ─────────
 @app.get("/api/route/optimize")
 async def optimize_route(
     from_id: str = Query(...), to_id: str = Query(...),
@@ -212,7 +293,6 @@ async def optimize_route(
         raise HTTPException(404, f"No route from {from_id} to {to_id}")
     return route
 
-
 @app.get("/api/route/pareto")
 async def pareto_route(
     from_id: str = Query(...), to_id: str = Query(...),
@@ -220,20 +300,8 @@ async def pareto_route(
 ):
     result = graph.pareto(from_id, to_id, max_solutions=max_solutions)
     if not result.routes:
-        raise HTTPException(404, f"No routes found")
+        raise HTTPException(404, "No routes found")
     return result
-
-
-@app.get("/api/route/timetable")
-async def timetable_route(
-    from_id: str = Query(...), to_id: str = Query(...),
-    depart: str | None = Query(None),
-):
-    dt = datetime.fromisoformat(depart) if depart else datetime.now(timezone.utc)
-    route = timetable.find_route(from_id, to_id, depart_after=dt)
-    if not route:
-        raise HTTPException(404, "No timetable route. Fetch trips first.")
-    return route
 
 
 # ── delays ────────────────────────────────────────────
@@ -244,28 +312,8 @@ async def delay_heatmap(country: str | None = None):
         return result
     return delay_tracker.get_heatmap(country=country)
 
-@app.get("/api/delays/station/{stop_id}")
-async def station_delays(stop_id: str):
-    heatmap = delay_tracker.get_heatmap()
-    for s in heatmap.stations:
-        if s.station_id == stop_id:
-            return s
-    raise HTTPException(404, "No delay data")
-
 
 # ── geometry ──────────────────────────────────────────
-@app.get("/api/geometry/track")
-async def track_geometry(
-    from_lat: float, from_lon: float,
-    to_lat: float, to_lon: float,
-    buffer_km: float = Query(5.0, le=20.0),
-):
-    result = await overpass.get_rail_geometry(
-        from_lat, from_lon, to_lat, to_lon, buffer_km=buffer_km)
-    if not result:
-        raise HTTPException(404, "No track geometry")
-    return result
-
 @app.get("/api/geometry/network")
 async def rail_network(
     min_lat: float, min_lon: float,
@@ -281,16 +329,6 @@ async def rail_network(
 async def ws_trains(websocket: WebSocket, stop_id: str):
     await ws_manager.connect(websocket, stop_id)
     try:
-        client = get_client(settings.default_operator)
-        try:
-            trains = await client.get_live_trains(stop_id, duration=30)
-            await websocket.send_json({
-                "type": "train_positions", "stop_id": stop_id,
-                "trains": [t.model_dump() for t in trains],
-                "timestamp": time.time(),
-            })
-        except Exception as e:
-            await websocket.send_json({"type": "error", "message": str(e)})
         while True:
             data = await websocket.receive_text()
             if data == "ping":
