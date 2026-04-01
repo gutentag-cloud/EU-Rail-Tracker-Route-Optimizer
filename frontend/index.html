@@ -3,84 +3,141 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1a73e8" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="/manifest.json" />
   <title>🚆 EU Rail Tracker</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', system-ui, sans-serif; }
+    :root {
+      --primary: #1a73e8;
+      --danger: #d32f2f;
+      --success: #2ecc71;
+      --warning: #f39c12;
+      --bg: rgba(255,255,255,0.97);
+      --card-bg: #f5f7fa;
+      --text: #333;
+      --text-muted: #777;
+      --radius: 10px;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    #map { width:100%; height:100vh; }
 
-    #map { width: 100%; height: 100vh; }
-
-    /* ── sidebar ───────────────────────────────────── */
+    /* ── sidebar ─────────────────────────────────── */
     #sidebar {
-      position: absolute; top: 10px; left: 10px; z-index: 1000;
-      width: 360px; max-height: calc(100vh - 20px);
-      background: rgba(255,255,255,0.96); border-radius: 12px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.15); overflow-y: auto;
-      padding: 20px;
+      position:absolute; top:10px; left:10px; z-index:1000;
+      width:380px; max-height:calc(100vh - 20px);
+      background:var(--bg); border-radius:14px;
+      box-shadow:0 4px 30px rgba(0,0,0,0.12); overflow-y:auto;
+      padding:20px; transition:transform 0.3s;
     }
-    h1 { font-size: 1.3em; margin-bottom: 12px; }
-    .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+    @media (max-width:500px) {
+      #sidebar {
+        width:calc(100vw - 20px); max-height:50vh;
+        top:auto; bottom:10px; left:10px; right:10px;
+        border-radius:14px 14px 14px 14px;
+      }
+    }
+    h1 { font-size:1.3em; margin-bottom:4px; }
+    .subtitle { font-size:0.8em; color:var(--text-muted); margin-bottom:14px; }
+
+    .tabs { display:flex; gap:3px; margin-bottom:16px; flex-wrap:wrap; }
     .tab {
-      flex: 1; padding: 8px; border: none; border-radius: 8px;
-      cursor: pointer; font-weight: 600; font-size: 0.85em;
-      background: #e8e8e8; transition: all 0.2s;
+      flex:1; min-width:60px; padding:7px 4px; border:none; border-radius:8px;
+      cursor:pointer; font-weight:600; font-size:0.78em;
+      background:#e8e8e8; transition:all 0.2s; white-space:nowrap;
     }
-    .tab.active { background: #1a73e8; color: white; }
+    .tab.active { background:var(--primary); color:white; }
 
-    .panel { display: none; }
-    .panel.active { display: block; }
+    .panel { display:none; }
+    .panel.active { display:block; }
 
-    label { font-size: 0.85em; font-weight: 600; color: #555;
-            display: block; margin-bottom: 4px; margin-top: 12px; }
+    label { font-size:0.82em; font-weight:600; color:#555;
+            display:block; margin-bottom:4px; margin-top:10px; }
     input, select {
-      width: 100%; padding: 10px; border: 1.5px solid #ddd;
-      border-radius: 8px; font-size: 0.95em; outline: none;
+      width:100%; padding:9px 12px; border:1.5px solid #ddd;
+      border-radius:8px; font-size:0.92em; outline:none;
+      transition:border 0.2s;
     }
-    input:focus { border-color: #1a73e8; }
-    button.primary {
-      width: 100%; padding: 12px; border: none; border-radius: 8px;
-      background: #1a73e8; color: white; font-weight: 700;
-      font-size: 1em; cursor: pointer; margin-top: 16px;
-      transition: background 0.2s;
-    }
-    button.primary:hover { background: #1557b0; }
-    button.primary:disabled { background: #aaa; cursor: wait; }
+    input:focus { border-color:var(--primary); }
+    .row { display:flex; gap:8px; }
+    .row > * { flex:1; }
 
-    .results { margin-top: 16px; }
-    .result-card {
-      padding: 12px; background: #f5f7fa; border-radius: 8px;
-      margin-bottom: 8px; font-size: 0.9em; cursor: pointer;
-      border-left: 4px solid #1a73e8; transition: background 0.2s;
+    button.primary {
+      width:100%; padding:11px; border:none; border-radius:8px;
+      background:var(--primary); color:white; font-weight:700;
+      font-size:0.95em; cursor:pointer; margin-top:14px;
+      transition:background 0.2s;
     }
-    .result-card:hover { background: #e3ecfa; }
-    .result-card .name { font-weight: 700; }
-    .result-card .meta { color: #777; font-size: 0.85em; }
+    button.primary:hover { background:#1557b0; }
+    button.primary:disabled { background:#aaa; cursor:wait; }
+
+    .results { margin-top:14px; }
+    .result-card {
+      padding:10px 12px; background:var(--card-bg); border-radius:8px;
+      margin-bottom:6px; font-size:0.88em; cursor:pointer;
+      border-left:4px solid var(--primary); transition:background 0.2s;
+    }
+    .result-card:hover { background:#e3ecfa; }
+    .result-card .name { font-weight:700; }
+    .result-card .meta { color:var(--text-muted); font-size:0.82em; }
 
     .route-stats {
-      display: grid; grid-template-columns: 1fr 1fr 1fr;
-      gap: 8px; margin-top: 12px;
+      display:grid; grid-template-columns:1fr 1fr 1fr;
+      gap:6px; margin-top:12px;
     }
     .stat {
-      text-align: center; background: #e3ecfa; padding: 10px;
-      border-radius: 8px;
+      text-align:center; background:#e3ecfa; padding:8px;
+      border-radius:8px;
     }
-    .stat .val { font-size: 1.3em; font-weight: 800; color: #1a73e8; }
-    .stat .lbl { font-size: 0.75em; color: #666; }
+    .stat .val { font-size:1.2em; font-weight:800; color:var(--primary); }
+    .stat .lbl { font-size:0.72em; color:#666; }
 
     .train-badge {
-      display: inline-block; background: #ff6b35; color: white;
-      padding: 2px 8px; border-radius: 12px; font-size: 0.8em;
-      font-weight: 700; margin-right: 6px;
+      display:inline-block; background:#ff6b35; color:white;
+      padding:2px 8px; border-radius:12px; font-size:0.78em;
+      font-weight:700; margin-right:4px;
+    }
+    .delay-badge {
+      display:inline-block; padding:2px 8px; border-radius:12px;
+      font-size:0.75em; font-weight:700; margin-left:4px;
     }
 
-    #status {
-      margin-top: 12px; padding: 8px; border-radius: 6px;
-      font-size: 0.85em; display: none;
+    .toggle-row {
+      display:flex; align-items:center; gap:8px;
+      margin-top:10px; font-size:0.85em;
     }
-    #status.info { display: block; background: #e3ecfa; color: #1a73e8; }
-    #status.error { display: block; background: #fde8e8; color: #d32f2f; }
+    .toggle-row input[type=checkbox] { width:auto; }
+
+    #status {
+      margin-top:10px; padding:8px; border-radius:6px;
+      font-size:0.82em; display:none;
+    }
+    #status.info { display:block; background:#e3ecfa; color:var(--primary); }
+    #status.error { display:block; background:#fde8e8; color:var(--danger); }
+    #status.success { display:block; background:#e8f8e8; color:var(--success); }
+
+    .operator-select {
+      display:flex; gap:4px; margin-top:8px;
+    }
+    .op-btn {
+      flex:1; padding:6px; border:2px solid #ddd; border-radius:8px;
+      background:white; cursor:pointer; font-weight:600;
+      font-size:0.8em; text-align:center; transition:all 0.2s;
+    }
+    .op-btn.active { border-color:var(--primary); background:#e3ecfa; }
+
+    .pareto-card {
+      padding:10px 12px; background:var(--card-bg); border-radius:8px;
+      margin-bottom:6px; font-size:0.85em; cursor:pointer;
+      border-left:4px solid var(--warning); transition:background 0.2s;
+    }
+    .pareto-card:hover { background:#fef5e3; }
+    .pareto-objs { display:flex; gap:12px; margin-top:4px; }
+    .pareto-obj { font-size:0.8em; color:var(--text-muted); }
+    .pareto-obj b { color:var(--text); }
   </style>
 </head>
 <body>
@@ -89,37 +146,58 @@
 
 <div id="sidebar">
   <h1>🚆 EU Rail Tracker</h1>
+  <div class="subtitle">Live tracking · Route optimization · Delay analytics</div>
 
-  <div class="tabs">
+  <!-- Operator selector -->
+  <label>Operator</label>
+  <div class="operator-select">
+    <div class="op-btn active" onclick="setOperator('db', this)">🇩🇪 DB</div>
+    <div class="op-btn" onclick="setOperator('oebb', this)">🇦🇹 ÖBB</div>
+    <div class="op-btn" onclick="setOperator('sbb', this)">🇨🇭 SBB</div>
+    <div class="op-btn" onclick="setOperator('sncf', this)">🇫🇷 SNCF</div>
+  </div>
+
+  <div class="tabs" style="margin-top:14px;">
     <button class="tab active" onclick="switchTab('tracker')">🔴 Live</button>
     <button class="tab" onclick="switchTab('router')">🗺️ Route</button>
+    <button class="tab" onclick="switchTab('pareto')">⚖️ Pareto</button>
+    <button class="tab" onclick="switchTab('delays')">📊 Delays</button>
     <button class="tab" onclick="switchTab('search')">🔍 Search</button>
   </div>
 
-  <!-- LIVE TRACKER -->
+  <!-- ── LIVE TRACKER ──────────────────────────── -->
   <div id="panel-tracker" class="panel active">
-    <label>Station (DB ID or name)</label>
+    <label>Station (ID or name)</label>
     <input id="track-station" placeholder="e.g. 8011160 (Berlin Hbf)" />
+    <div class="toggle-row">
+      <input type="checkbox" id="auto-refresh" checked />
+      <label for="auto-refresh" style="margin:0;">Auto-refresh (15s)</label>
+      <input type="checkbox" id="use-websocket" />
+      <label for="use-websocket" style="margin:0;">WebSocket</label>
+    </div>
+    <div class="toggle-row">
+      <input type="checkbox" id="show-tracks" />
+      <label for="show-tracks" style="margin:0;">Show rail tracks (OSM)</label>
+    </div>
     <button class="primary" onclick="trackLive()">Track Live Trains</button>
     <div id="track-results" class="results"></div>
   </div>
 
-  <!-- ROUTE OPTIMIZER -->
+  <!-- ── ROUTE OPTIMIZER ───────────────────────── -->
   <div id="panel-router" class="panel">
     <label>From station ID</label>
-    <input id="route-from" placeholder="Station ID (search tab to find)" />
+    <input id="route-from" placeholder="Station ID" />
     <label>To station ID</label>
     <input id="route-to" placeholder="Station ID" />
-
-    <div style="display:flex; gap:8px; margin-top:12px;">
-      <div style="flex:1">
+    <div class="row">
+      <div>
         <label>Algorithm</label>
         <select id="route-algo">
           <option value="astar">A* (fast)</option>
           <option value="dijkstra">Dijkstra</option>
         </select>
       </div>
-      <div style="flex:1">
+      <div>
         <label>Optimize for</label>
         <select id="route-weight">
           <option value="duration">⏱ Duration</option>
@@ -127,12 +205,36 @@
         </select>
       </div>
     </div>
-
+    <div class="toggle-row">
+      <input type="checkbox" id="show-rail-geometry" />
+      <label for="show-rail-geometry" style="margin:0;">Overlay rail tracks</label>
+    </div>
     <button class="primary" onclick="findRoute()">Find Optimal Route</button>
     <div id="route-results" class="results"></div>
   </div>
 
-  <!-- SEARCH -->
+  <!-- ── PARETO ────────────────────────────────── -->
+  <div id="panel-pareto" class="panel">
+    <label>From station ID</label>
+    <input id="pareto-from" placeholder="Station ID" />
+    <label>To station ID</label>
+    <input id="pareto-to" placeholder="Station ID" />
+    <button class="primary" onclick="findPareto()">Find Pareto Routes</button>
+    <div id="pareto-results" class="results"></div>
+  </div>
+
+  <!-- ── DELAY HEATMAP ─────────────────────────── -->
+  <div id="panel-delays" class="panel">
+    <label>Country (optional)</label>
+    <input id="delay-country" placeholder="e.g. DE, AT, CH, FR" />
+    <button class="primary" onclick="loadHeatmap()">Load Delay Heatmap</button>
+    <p style="font-size:0.8em;color:var(--text-muted);margin-top:8px;">
+      💡 Track some trains first to collect delay data, then view the heatmap.
+    </p>
+    <div id="delay-results" class="results"></div>
+  </div>
+
+  <!-- ── SEARCH ────────────────────────────────── -->
   <div id="panel-search" class="panel">
     <label>Search stations</label>
     <input id="search-input" placeholder="Berlin, Paris, Wien..."
@@ -144,29 +246,44 @@
 </div>
 
 <script>
+// ══════════════════════════════════════════════════════
+//  GLOBALS
+// ══════════════════════════════════════════════════════
 const API = window.location.origin + '/api';
+let currentOperator = 'db';
+let autoRefreshInterval = null;
+let wsConnection = null;
 
-// ── Map Setup ──────────────────────────────────────────
+// ══════════════════════════════════════════════════════
+//  MAP SETUP
+// ══════════════════════════════════════════════════════
 const map = L.map('map').setView([50.1, 10.0], 5);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; OSM &copy; CARTO',
-  maxZoom: 18,
+  attribution: '&copy; OSM &copy; CARTO', maxZoom: 18,
 }).addTo(map);
 
-const trainIcon = L.divIcon({
-  html: '<div style="font-size:22px;">🚆</div>',
-  iconSize: [28, 28], iconAnchor: [14, 14], className: ''
-});
-const stationIcon = L.divIcon({
-  html: '<div style="font-size:16px;">📍</div>',
-  iconSize: [20, 20], iconAnchor: [10, 10], className: ''
-});
+const trainIcon = L.divIcon({ html:'<div style="font-size:22px">🚆</div>', iconSize:[28,28], iconAnchor:[14,14], className:'' });
+const stationIcon = L.divIcon({ html:'<div style="font-size:16px">📍</div>', iconSize:[20,20], iconAnchor:[10,10], className:'' });
 
-let trainMarkers = L.layerGroup().addTo(map);
-let routeLayer = L.layerGroup().addTo(map);
-let stationMarkers = L.layerGroup().addTo(map);
+const trainMarkers   = L.layerGroup().addTo(map);
+const routeLayer     = L.layerGroup().addTo(map);
+const stationMarkers = L.layerGroup().addTo(map);
+const heatmapLayer   = L.layerGroup().addTo(map);
+const trackLayer     = L.layerGroup().addTo(map);
 
-// ── Tab Switching ──────────────────────────────────────
+// ══════════════════════════════════════════════════════
+//  OPERATOR SELECTION
+// ══════════════════════════════════════════════════════
+function setOperator(op, el) {
+  currentOperator = op;
+  document.querySelectorAll('.op-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  setStatus(`Operator: ${op.toUpperCase()}`, 'info');
+}
+
+// ══════════════════════════════════════════════════════
+//  UI HELPERS
+// ══════════════════════════════════════════════════════
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -174,163 +291,391 @@ function switchTab(name) {
   document.getElementById('panel-' + name).classList.add('active');
 }
 
-function setStatus(msg, type = 'info') {
+function setStatus(msg, type='info') {
   const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = type;
-}
-function clearStatus() {
-  document.getElementById('status').className = '';
-  document.getElementById('status').style.display = 'none';
+  el.textContent = msg; el.className = type;
 }
 
-// ── Live Tracker ───────────────────────────────────────
+function clearStatus() {
+  const el = document.getElementById('status');
+  el.className = ''; el.style.display = 'none';
+}
+
+function formatDuration(min) {
+  const h = Math.floor(min / 60), m = Math.round(min % 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function delayBadge(sec) {
+  if (sec == null) return '';
+  const min = Math.round(sec / 60);
+  if (min <= 0) return '<span class="delay-badge" style="background:#2ecc71;color:white">on time</span>';
+  if (min <= 5) return `<span class="delay-badge" style="background:#f1c40f;color:#333">+${min}m</span>`;
+  return `<span class="delay-badge" style="background:#e74c3c;color:white">+${min}m</span>`;
+}
+
+// ══════════════════════════════════════════════════════
+//  LIVE TRACKER
+// ══════════════════════════════════════════════════════
+async function resolveStopId(input) {
+  if (/^\d+$/.test(input)) return input;
+  const res = await fetch(`${API}/stations/search?q=${encodeURIComponent(input)}&limit=1&operator=${currentOperator}`);
+  const stations = await res.json();
+  if (stations.length === 0) throw new Error('Station not found');
+  return stations[0].db_id || stations[0].id;
+}
+
 async function trackLive() {
   const input = document.getElementById('track-station').value.trim();
   if (!input) return;
+
+  // Clear previous
+  if (autoRefreshInterval) { clearInterval(autoRefreshInterval); autoRefreshInterval = null; }
+  if (wsConnection) { wsConnection.close(); wsConnection = null; }
 
   setStatus('Fetching live train positions...', 'info');
   trainMarkers.clearLayers();
 
   try {
-    // try as stop ID first, then search
-    let stopId = input;
-    if (!/^\d+$/.test(input)) {
-      const res = await fetch(`${API}/stations/search?q=${encodeURIComponent(input)}&limit=1`);
-      const stations = await res.json();
-      if (stations.length === 0) { setStatus('Station not found', 'error'); return; }
-      stopId = stations[0].db_id || stations[0].id;
+    const stopId = await resolveStopId(input);
+    const useWS = document.getElementById('use-websocket').checked;
+
+    if (useWS) {
+      connectWebSocket(stopId);
+    } else {
+      await fetchAndRenderTrains(stopId);
+
+      // Auto-refresh
+      if (document.getElementById('auto-refresh').checked) {
+        autoRefreshInterval = setInterval(() => fetchAndRenderTrains(stopId), 15000);
+        setStatus('Auto-refreshing every 15s', 'success');
+      }
     }
 
-    const res = await fetch(`${API}/trains/live/${stopId}`);
-    if (!res.ok) throw new Error(await res.text());
-    const trains = await res.json();
-
-    const container = document.getElementById('track-results');
-    if (trains.length === 0) {
-      container.innerHTML = '<p style="color:#888;margin-top:8px;">No active trains found. Try a major station like Berlin Hbf (8011160).</p>';
-      setStatus('No trains in motion found', 'info');
-      return;
+    // Load rail tracks if enabled
+    if (document.getElementById('show-tracks').checked) {
+      loadNearbyTracks(stopId);
     }
 
-    container.innerHTML = '';
-    const bounds = [];
-    trains.forEach(t => {
-      const marker = L.marker([t.coords.latitude, t.coords.longitude], {icon: trainIcon})
-        .bindPopup(`
-          <b>${t.line_name}</b> → ${t.direction}<br>
-          ${t.prev_station} → ${t.next_station}<br>
-          Progress: ${(t.progress * 100).toFixed(0)}%
-          ${t.speed_kmh ? '<br>~' + t.speed_kmh + ' km/h' : ''}
-        `)
-        .addTo(trainMarkers);
-      bounds.push([t.coords.latitude, t.coords.longitude]);
-
-      container.innerHTML += `
-        <div class="result-card" onclick="map.setView([${t.coords.latitude},${t.coords.longitude}],12)">
-          <span class="train-badge">${t.line_name}</span>
-          <span class="name">${t.direction}</span>
-          <div class="meta">${t.prev_station} → ${t.next_station} (${(t.progress*100).toFixed(0)}%)</div>
-        </div>`;
-    });
-
-    if (bounds.length) map.fitBounds(bounds, {padding: [50, 400]});
-    setStatus(`Found ${trains.length} active trains`, 'info');
   } catch (e) {
     setStatus('Error: ' + e.message, 'error');
   }
 }
 
-// ── Route Optimizer ────────────────────────────────────
+async function fetchAndRenderTrains(stopId) {
+  try {
+    const res = await fetch(`${API}/trains/live/${stopId}?operator=${currentOperator}`);
+    if (!res.ok) throw new Error(await res.text());
+    const trains = await res.json();
+    renderTrains(trains, stopId);
+  } catch(e) {
+    console.error('Fetch trains error:', e);
+  }
+}
+
+function renderTrains(trains, stopId) {
+  trainMarkers.clearLayers();
+  const container = document.getElementById('track-results');
+
+  if (trains.length === 0) {
+    container.innerHTML = '<p style="color:#888;margin-top:8px;">No active trains. Try a major station.</p>';
+    return;
+  }
+
+  container.innerHTML = '';
+  const bounds = [];
+  trains.forEach(t => {
+    L.marker([t.coords.latitude, t.coords.longitude], {icon: trainIcon})
+      .bindPopup(`
+        <b>${t.line_name}</b> → ${t.direction}<br>
+        ${t.prev_station} → ${t.next_station}<br>
+        Progress: ${(t.progress * 100).toFixed(0)}%
+        ${t.speed_kmh ? '<br>~' + t.speed_kmh + ' km/h' : ''}
+      `)
+      .addTo(trainMarkers);
+    bounds.push([t.coords.latitude, t.coords.longitude]);
+
+    container.innerHTML += `
+      <div class="result-card" onclick="map.setView([${t.coords.latitude},${t.coords.longitude}],12)">
+        <span class="train-badge">${t.line_name}</span>
+        <span class="name">${t.direction}</span>
+        <div class="meta">${t.prev_station} → ${t.next_station} (${(t.progress*100).toFixed(0)}%)</div>
+      </div>`;
+  });
+
+  if (bounds.length) map.fitBounds(bounds, {padding: [50, 400]});
+  setStatus(`${trains.length} active trains`, 'success');
+}
+
+// ══════════════════════════════════════════════════════
+//  WEBSOCKET
+// ══════════════════════════════════════════════════════
+function connectWebSocket(stopId) {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${protocol}//${location.host}/ws/trains/${stopId}`;
+
+  wsConnection = new WebSocket(url);
+  setStatus('Connecting WebSocket...', 'info');
+
+  wsConnection.onopen = () => {
+    setStatus('🟢 WebSocket connected — live updates', 'success');
+  };
+
+  wsConnection.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'train_positions') {
+      renderTrains(data.trains, stopId);
+    }
+  };
+
+  wsConnection.onclose = () => {
+    setStatus('WebSocket disconnected', 'info');
+  };
+
+  wsConnection.onerror = () => {
+    setStatus('WebSocket error — falling back to polling', 'error');
+    wsConnection = null;
+    fetchAndRenderTrains(stopId);
+    if (document.getElementById('auto-refresh').checked) {
+      autoRefreshInterval = setInterval(() => fetchAndRenderTrains(stopId), 15000);
+    }
+  };
+}
+
+// ══════════════════════════════════════════════════════
+//  TRACK GEOMETRY (OSM)
+// ══════════════════════════════════════════════════════
+async function loadNearbyTracks(stopId) {
+  trackLayer.clearLayers();
+  try {
+    const bounds = map.getBounds();
+    const res = await fetch(
+      `${API}/geometry/network?min_lat=${bounds.getSouth()}&min_lon=${bounds.getWest()}` +
+      `&max_lat=${bounds.getNorth()}&max_lon=${bounds.getEast()}`
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    data.lines.forEach(line => {
+      const latlngs = line.map(c => [c[1], c[0]]); // [lon,lat] → [lat,lon]
+      L.polyline(latlngs, { color: '#888', weight: 1.5, opacity: 0.4 }).addTo(trackLayer);
+    });
+  } catch(e) { console.warn('Track geometry error:', e); }
+}
+
+async function loadRouteGeometry(fromLat, fromLon, toLat, toLon) {
+  try {
+    const res = await fetch(
+      `${API}/geometry/track?from_lat=${fromLat}&from_lon=${fromLon}` +
+      `&to_lat=${toLat}&to_lon=${toLon}&buffer_km=10`
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    const latlngs = data.coordinates.map(c => [c[1], c[0]]);
+    L.polyline(latlngs, { color: '#1a73e8', weight: 2, opacity: 0.3 }).addTo(routeLayer);
+  } catch(e) { console.warn('Route geometry error:', e); }
+}
+
+// ══════════════════════════════════════════════════════
+//  ROUTE OPTIMIZER
+// ══════════════════════════════════════════════════════
 async function findRoute() {
   const fromId = document.getElementById('route-from').value.trim();
-  const toId = document.getElementById('route-to').value.trim();
-  const algo = document.getElementById('route-algo').value;
+  const toId   = document.getElementById('route-to').value.trim();
+  const algo   = document.getElementById('route-algo').value;
   const weight = document.getElementById('route-weight').value;
-
   if (!fromId || !toId) return;
+
   setStatus('Computing optimal route...', 'info');
   routeLayer.clearLayers();
 
   try {
     const res = await fetch(
-      `${API}/route/optimize?from_id=${encodeURIComponent(fromId)}` +
-      `&to_id=${encodeURIComponent(toId)}&algorithm=${algo}&weight=${weight}`
+      `${API}/route/optimize?from_id=${enc(fromId)}&to_id=${enc(toId)}` +
+      `&algorithm=${algo}&weight=${weight}`
     );
     if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
     const route = await res.json();
+    renderRoute(route, 'route-results');
 
-    const container = document.getElementById('route-results');
-    container.innerHTML = `
-      <div class="route-stats">
-        <div class="stat"><div class="val">${formatDuration(route.total_duration_minutes)}</div><div class="lbl">Duration</div></div>
-        <div class="stat"><div class="val">${route.total_distance_km.toFixed(0)}</div><div class="lbl">km</div></div>
-        <div class="stat"><div class="val">${route.num_stops}</div><div class="lbl">Stops</div></div>
-      </div>`;
-
-    const latlngs = [];
-    route.segments.forEach((seg, i) => {
-      const from = seg.from_station;
-      const to = seg.to_station;
-      latlngs.push([from.coords.latitude, from.coords.longitude]);
-      if (i === route.segments.length - 1) {
-        latlngs.push([to.coords.latitude, to.coords.longitude]);
-      }
-
-      // station markers
-      L.circleMarker([from.coords.latitude, from.coords.longitude], {
-        radius: 6, fillColor: '#1a73e8', color: 'white',
-        weight: 2, fillOpacity: 1
-      }).bindPopup(`<b>${from.name}</b><br>${from.country}`)
-        .addTo(routeLayer);
-
-      container.innerHTML += `
-        <div class="result-card">
-          <div class="name">${from.name} → ${to.name}</div>
-          <div class="meta">${seg.distance_km} km · ${formatDuration(seg.duration_minutes)}</div>
-        </div>`;
-    });
-
-    // end marker
-    const last = route.segments[route.segments.length - 1].to_station;
-    L.circleMarker([last.coords.latitude, last.coords.longitude], {
-      radius: 8, fillColor: '#d32f2f', color: 'white',
-      weight: 2, fillOpacity: 1
-    }).bindPopup(`<b>${last.name}</b> (destination)`)
-      .addTo(routeLayer);
-
-    // polyline
-    L.polyline(latlngs, {
-      color: '#1a73e8', weight: 4, opacity: 0.8,
-      dashArray: '8, 8'
-    }).addTo(routeLayer);
-
-    map.fitBounds(latlngs, {padding: [50, 400]});
-    clearStatus();
+    // Overlay real track geometry if enabled
+    if (document.getElementById('show-rail-geometry').checked && route.segments.length > 0) {
+      const first = route.segments[0].from_station;
+      const last  = route.segments[route.segments.length - 1].to_station;
+      loadRouteGeometry(first.coords.latitude, first.coords.longitude,
+                        last.coords.latitude, last.coords.longitude);
+    }
   } catch (e) {
     setStatus('Error: ' + e.message, 'error');
   }
 }
 
-function formatDuration(min) {
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+function renderRoute(route, containerId) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = `
+    <div class="route-stats">
+      <div class="stat"><div class="val">${formatDuration(route.total_duration_minutes)}</div><div class="lbl">Duration</div></div>
+      <div class="stat"><div class="val">${route.total_distance_km.toFixed(0)}</div><div class="lbl">km</div></div>
+      <div class="stat"><div class="val">${route.num_stops}</div><div class="lbl">Stops</div></div>
+    </div>`;
+
+  const latlngs = [];
+  route.segments.forEach((seg, i) => {
+    const from = seg.from_station, to = seg.to_station;
+    latlngs.push([from.coords.latitude, from.coords.longitude]);
+    if (i === route.segments.length - 1) latlngs.push([to.coords.latitude, to.coords.longitude]);
+
+    L.circleMarker([from.coords.latitude, from.coords.longitude], {
+      radius:6, fillColor:'#1a73e8', color:'white', weight:2, fillOpacity:1
+    }).bindPopup(`<b>${from.name}</b><br>${from.country}`).addTo(routeLayer);
+
+    container.innerHTML += `
+      <div class="result-card">
+        <div class="name">${from.name} → ${to.name}</div>
+        <div class="meta">${seg.distance_km} km · ${formatDuration(seg.duration_minutes)}</div>
+      </div>`;
+  });
+
+  // End marker
+  const last = route.segments[route.segments.length-1].to_station;
+  L.circleMarker([last.coords.latitude, last.coords.longitude], {
+    radius:8, fillColor:'#d32f2f', color:'white', weight:2, fillOpacity:1
+  }).bindPopup(`<b>${last.name}</b> (destination)`).addTo(routeLayer);
+
+  // Polyline
+  L.polyline(latlngs, { color:'#1a73e8', weight:4, opacity:0.8, dashArray:'8,8' }).addTo(routeLayer);
+  map.fitBounds(latlngs, {padding:[50,400]});
+  clearStatus();
 }
 
-// ── Station Search ─────────────────────────────────────
-let searchTimeout;
-function debounceSearch() {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(searchStations, 300);
+// ══════════════════════════════════════════════════════
+//  PARETO MULTI-CRITERIA
+// ══════════════════════════════════════════════════════
+async function findPareto() {
+  const fromId = document.getElementById('pareto-from').value.trim();
+  const toId   = document.getElementById('pareto-to').value.trim();
+  if (!fromId || !toId) return;
+
+  setStatus('Computing Pareto-optimal routes...', 'info');
+  routeLayer.clearLayers();
+
+  try {
+    const res = await fetch(`${API}/route/pareto?from_id=${enc(fromId)}&to_id=${enc(toId)}`);
+    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const data = await res.json();
+
+    const container = document.getElementById('pareto-results');
+    container.innerHTML = `<p style="font-size:0.85em;color:var(--text-muted);margin-bottom:8px;">
+      ${data.routes.length} Pareto-optimal solutions (${data.total_explored.toLocaleString()} nodes explored)</p>`;
+
+    const colors = ['#1a73e8','#e74c3c','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#3498db','#e91e63','#00bcd4'];
+
+    data.routes.forEach((pr, idx) => {
+      const o = pr.objectives;
+      const color = colors[idx % colors.length];
+
+      container.innerHTML += `
+        <div class="pareto-card" onclick="showParetoRoute(${idx})"
+             style="border-left-color:${color}">
+          <div class="name">Route ${idx + 1}</div>
+          <div class="pareto-objs">
+            <span class="pareto-obj">⏱ <b>${formatDuration(o.duration_minutes)}</b></span>
+            <span class="pareto-obj">🔄 <b>${o.transfers}</b> transfers</span>
+            <span class="pareto-obj">📏 <b>${o.distance_km.toFixed(0)}</b> km</span>
+          </div>
+        </div>`;
+
+      // Draw on map
+      const latlngs = [];
+      pr.route.segments.forEach(seg => {
+        latlngs.push([seg.from_station.coords.latitude, seg.from_station.coords.longitude]);
+        latlngs.push([seg.to_station.coords.latitude, seg.to_station.coords.longitude]);
+      });
+      if (latlngs.length) {
+        L.polyline(latlngs, { color, weight: 3, opacity: 0.7 }).addTo(routeLayer);
+      }
+    });
+
+    // Fit bounds to all routes
+    const allLatLngs = [];
+    data.routes.forEach(pr => {
+      pr.route.segments.forEach(seg => {
+        allLatLngs.push([seg.from_station.coords.latitude, seg.from_station.coords.longitude]);
+        allLatLngs.push([seg.to_station.coords.latitude, seg.to_station.coords.longitude]);
+      });
+    });
+    if (allLatLngs.length) map.fitBounds(allLatLngs, {padding:[50,400]});
+    setStatus(`${data.routes.length} Pareto routes found`, 'success');
+  } catch (e) {
+    setStatus('Error: ' + e.message, 'error');
+  }
 }
+
+// ══════════════════════════════════════════════════════
+//  DELAY HEATMAP
+// ══════════════════════════════════════════════════════
+async function loadHeatmap() {
+  const country = document.getElementById('delay-country').value.trim();
+  setStatus('Loading delay data...', 'info');
+  heatmapLayer.clearLayers();
+
+  try {
+    const url = `${API}/delays/heatmap` + (country ? `?country=${enc(country)}` : '');
+    const res = await fetch(url);
+    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const data = await res.json();
+
+    const container = document.getElementById('delay-results');
+    if (data.stations.length === 0) {
+      container.innerHTML = '<p style="color:#888">No delay data yet. Track some trains first!</p>';
+      setStatus('No delay data available', 'info');
+      return;
+    }
+
+    container.innerHTML = `<p style="font-size:0.82em;color:var(--text-muted)">
+      ${data.stations.length} stations with delay data (last ${data.period_hours}h)</p>`;
+
+    const bounds = [];
+    data.stations.forEach(s => {
+      const radius = Math.min(20, Math.max(6, s.total_records));
+      L.circleMarker([s.coords.latitude, s.coords.longitude], {
+        radius, fillColor: s.color, color: 'white', weight: 2, fillOpacity: 0.8
+      }).bindPopup(`
+        <b>${s.station_name}</b><br>
+        Avg delay: ${(s.avg_delay_seconds / 60).toFixed(1)} min<br>
+        On-time: ${s.on_time_pct}%<br>
+        Records: ${s.total_records}
+      `).addTo(heatmapLayer);
+      bounds.push([s.coords.latitude, s.coords.longitude]);
+
+      container.innerHTML += `
+        <div class="result-card" style="border-left-color:${s.color}"
+             onclick="map.setView([${s.coords.latitude},${s.coords.longitude}],12)">
+          <div class="name">${s.station_name}</div>
+          <div class="meta">
+            Avg: ${(s.avg_delay_seconds/60).toFixed(1)}m · On-time: ${s.on_time_pct}% · ${s.total_records} records
+          </div>
+        </div>`;
+    });
+
+    if (bounds.length) map.fitBounds(bounds, {padding:[50,400]});
+    setStatus(`Delay heatmap: ${data.stations.length} stations`, 'success');
+  } catch(e) {
+    setStatus('Error: ' + e.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  STATION SEARCH
+// ══════════════════════════════════════════════════════
+let searchTimeout;
+function debounceSearch() { clearTimeout(searchTimeout); searchTimeout = setTimeout(searchStations, 300); }
 
 async function searchStations() {
   const q = document.getElementById('search-input').value.trim();
   if (q.length < 2) return;
 
   try {
-    const res = await fetch(`${API}/stations/search?q=${encodeURIComponent(q)}&limit=15`);
+    const res = await fetch(`${API}/stations/search?q=${enc(q)}&limit=15&operator=${currentOperator}`);
     const stations = await res.json();
     const container = document.getElementById('search-results');
     container.innerHTML = '';
@@ -347,15 +692,24 @@ async function searchStations() {
           <div class="meta">ID: ${s.id} ${s.db_id ? '· DB: '+s.db_id : ''} · ${s.country}</div>
         </div>`;
     });
-  } catch (e) {
-    console.error(e);
-  }
+  } catch(e) { console.error(e); }
 }
 
 function selectStation(id, lat, lon) {
   map.setView([lat, lon], 10);
-  navigator.clipboard?.writeText(id);
-  setStatus(`Station ID "${id}" copied — paste into Route or Live panels`, 'info');
+  if (navigator.clipboard) navigator.clipboard.writeText(id);
+  setStatus(`Station ID "${id}" copied to clipboard`, 'success');
+}
+
+function enc(s) { return encodeURIComponent(s); }
+
+// ══════════════════════════════════════════════════════
+//  PWA REGISTRATION
+// ══════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js')
+    .then(() => console.log('SW registered'))
+    .catch(e => console.warn('SW registration failed:', e));
 }
 </script>
 </body>
