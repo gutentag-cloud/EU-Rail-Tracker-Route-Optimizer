@@ -12,13 +12,11 @@ log = logging.getLogger(__name__)
 try:
     import redis.asyncio as aioredis
     HAS_REDIS = True
-except ImportError:
+except Exception:                          # ← THIS LINE CHANGED
     HAS_REDIS = False
 
 
 class Cache:
-    """Async Redis cache with automatic fallback."""
-
     def __init__(self) -> None:
         self._redis: Optional[Any] = None
         self.connected = False
@@ -38,7 +36,7 @@ class Cache:
             log.info("✅ Redis connected")
             return True
         except Exception as e:
-            log.warning(f"⚠️  Redis connection failed: {e} — caching disabled")
+            log.warning(f"⚠️  Redis connection failed: {e}")
             self._redis = None
             self.connected = False
             return False
@@ -103,5 +101,4 @@ class Cache:
             return {"connected": False}
 
 
-# Global singleton
 cache = Cache()
