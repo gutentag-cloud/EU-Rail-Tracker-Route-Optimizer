@@ -1,6 +1,6 @@
 """
-Load and index the trainline-eu/stations open dataset.
-CSV source: https://github.com/trainline-eu/stations
+In-memory station store loaded from trainline-eu/stations CSV.
+Serves as primary store — PostGIS used for spatial queries when available.
 """
 
 from __future__ import annotations
@@ -8,11 +8,13 @@ import csv, math, os
 from typing import Optional
 from .models import Station, Coordinates
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "stations.csv")
+DATA_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "data", "stations.csv"
+)
 
 
-def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Distance in km between two coordinates."""
+def haversine(lat1: float, lon1: float,
+              lat2: float, lon2: float) -> float:
     R = 6371.0
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
@@ -29,9 +31,7 @@ class StationStore:
         self._by_db_id: dict[str, Station] = {}
         self._all: list[Station] = []
 
-    # ── loading ───────────────────────────────────────────
     def load_csv(self, path: str = DATA_PATH) -> int:
-        """Load trainline-eu stations CSV. Returns count loaded."""
         self._by_id.clear()
         self._by_db_id.clear()
         self._all.clear()
@@ -45,8 +45,7 @@ class StationStore:
                     continue
                 try:
                     coords = Coordinates(
-                        latitude=float(lat),
-                        longitude=float(lon),
+                        latitude=float(lat), longitude=float(lon),
                     )
                 except (ValueError, TypeError):
                     continue
@@ -68,9 +67,9 @@ class StationStore:
 
         return len(self._all)
 
-    # ── queries ───────────────────────────────────────────
     def get(self, station_id: str) -> Optional[Station]:
-        return self._by_id.get(station_id) or self._by_db_id.get(station_id)
+        return self._by_id.get(station_id) or \
+               self._by_db_id.get(station_id)
 
     def search(self, query: str, limit: int = 10,
                country: str | None = None) -> list[Station]:
@@ -86,19 +85,24 @@ class StationStore:
         return results
 
     def nearby(self, lat: float, lon: float,
-               radius_km: float = 50, limit: int = 20) -> list[Station]:
+               radius_km: float = 50,
+               limit: int = 20) -> list[Station]:
         scored: list[tuple[float, Station]] = []
         for s in self._all:
-            d = haversine(lat, lon, s.coords.latitude, s.coords.longitude)
+            d = haversine(lat, lon,
+                          s.coords.latitude, s.coords.longitude)
             if d <= radius_km:
                 scored.append((d, s))
         scored.sort(key=lambda x: x[0])
         return [s for _, s in scored[:limit]]
 
-    def main_stations(self, country: str | None = None) -> list[Station]:
+    def main_stations(self,
+                      country: str | None = None) -> list[Station]:
         return [
             s for s in self._all
-            if s.is_main and (not country or s.country.lower() == country.lower())
+            if s.is_main and (
+                not country or s.country.lower() == country.lower()
+            )
         ]
 
     @property
