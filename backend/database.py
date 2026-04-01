@@ -16,8 +16,9 @@ try:
     )
     from sqlalchemy import text
     HAS_DB = True
-except ImportError:
+except Exception:                          # ← THIS LINE CHANGED
     HAS_DB = False
+    log.warning("SQLAlchemy not available — database disabled")
 
 
 class Database:
@@ -43,7 +44,6 @@ class Database:
             self._session_factory = async_sessionmaker(
                 self._engine, expire_on_commit=False,
             )
-            # Test connection
             async with self._engine.begin() as conn:
                 await conn.execute(text("SELECT 1"))
             self.connected = True
@@ -73,7 +73,6 @@ class Database:
 
     async def execute(self, query: str,
                       params: Optional[dict] = None) -> list[dict]:
-        """Execute raw SQL and return rows as dicts."""
         if not self._session_factory:
             return []
         async with self.session() as session:
@@ -86,7 +85,6 @@ class Database:
                 return [dict(row._mapping) for row in result.fetchall()]
             return []
 
-    # ── Station Operations ────────────────────────────
     async def upsert_station(self, station_data: dict) -> None:
         await self.execute("""
             INSERT INTO stations (id, name, country, db_id, uic, is_main, geom)
@@ -130,7 +128,7 @@ class Database:
                    ST_Y(geom) AS latitude, ST_X(geom) AS longitude,
                    similarity(name, :query) AS sim
             FROM stations
-            WHERE name % :query OR name ILIKE :pattern
+            WHERE name %% :query OR name ILIKE :pattern
             ORDER BY sim DESC
             LIMIT :limit
         """, {
@@ -139,7 +137,6 @@ class Database:
             "limit": limit,
         })
 
-    # ── Delay Operations ──────────────────────────────
     async def record_delay(self, station_id: str, trip_id: str,
                            line_name: str, delay_sec: int) -> None:
         await self.execute("""
@@ -182,7 +179,6 @@ class Database:
             ORDER BY avg_delay_sec DESC
         """, params)
 
-    # ── Geometry Cache ────────────────────────────────
     async def get_cached_geometry(self, from_lat: float, from_lon: float,
                                   to_lat: float,
                                   to_lon: float) -> Optional[list]:
@@ -206,5 +202,4 @@ class Database:
         return None
 
 
-# Global singleton
 db = Database()
