@@ -95,7 +95,7 @@ make dev
 
 ```bash
 # Clone
-git clone [https://github.com/gutentag-cloud/EU-Rail-Tracker-Route-Optimizer.git](https://github.com/gutentag-cloud/EU-Rail-Tracker-Route-Optimizer.git)
+git clone [https://github.com/gutentag-cloud/EU-Rail-Tracker-Route-Optimizer.git]
 cd eu-rail-tracker
 
 # Copy env config
