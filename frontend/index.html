@@ -1,132 +1,64 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#1a73e8" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <link rel="manifest" href="/manifest.json" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <meta name="theme-color" content="#1a73e8"/>
+  <link rel="manifest" href="/manifest.json"/>
   <title>🚆 EU Rail Tracker</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    :root {
-      --primary:#1a73e8; --danger:#d32f2f; --success:#2ecc71;
-      --warning:#f39c12; --bg:rgba(255,255,255,0.97);
-      --card:#f5f7fa; --text:#333; --muted:#888; --r:10px;
-    }
+    :root{--p:#1a73e8;--r:#d32f2f;--g:#2ecc71;--w:#f39c12;--bg:rgba(255,255,255,.97);--card:#f5f7fa;--m:#888;--rd:10px}
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif}
+    body{font-family:'Segoe UI',system-ui,sans-serif}
     #map{width:100%;height:100vh}
-
-    /* sidebar */
-    #sidebar{
-      position:absolute;top:10px;left:10px;z-index:1000;
-      width:380px;max-height:calc(100vh - 20px);
-      background:var(--bg);border-radius:14px;
-      box-shadow:0 4px 30px rgba(0,0,0,0.12);
-      overflow-y:auto;padding:20px;
-    }
-    @media(max-width:500px){
-      #sidebar{width:calc(100vw - 20px);max-height:50vh;
-        top:auto;bottom:10px;left:10px;right:10px}
-    }
-    h1{font-size:1.3em;margin-bottom:4px}
-    .sub{font-size:0.78em;color:var(--muted);margin-bottom:14px}
-
+    #sidebar{position:absolute;top:10px;left:10px;z-index:1000;width:390px;max-height:calc(100vh - 20px);background:var(--bg);border-radius:14px;box-shadow:0 4px 30px rgba(0,0,0,.12);overflow-y:auto;padding:18px}
+    @media(max-width:500px){#sidebar{width:calc(100vw - 20px);max-height:50vh;top:auto;bottom:10px}}
+    h1{font-size:1.3em;margin-bottom:4px}.sub{font-size:.78em;color:var(--m);margin-bottom:12px}
     .tabs{display:flex;gap:3px;margin-bottom:14px;flex-wrap:wrap}
-    .tab{
-      flex:1;min-width:55px;padding:7px 4px;border:none;border-radius:8px;
-      cursor:pointer;font-weight:600;font-size:0.78em;
-      background:#e8e8e8;transition:all .2s;white-space:nowrap;
-    }
-    .tab.active{background:var(--primary);color:#fff}
+    .tab{flex:1;min-width:50px;padding:7px 3px;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:.75em;background:#e8e8e8;transition:all .2s;white-space:nowrap}
+    .tab.active{background:var(--p);color:#fff}
     .panel{display:none}.panel.active{display:block}
-
-    label{font-size:0.82em;font-weight:600;color:#555;
-      display:block;margin-bottom:4px;margin-top:10px}
-    input,select{
-      width:100%;padding:9px 12px;border:1.5px solid #ddd;
-      border-radius:8px;font-size:0.92em;outline:none;
-    }
-    input:focus{border-color:var(--primary)}
+    label{font-size:.82em;font-weight:600;color:#555;display:block;margin-bottom:4px;margin-top:10px}
+    input,select{width:100%;padding:9px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:.92em;outline:none}
+    input:focus{border-color:var(--p)}
     .row{display:flex;gap:8px}.row>*{flex:1}
-    button.primary{
-      width:100%;padding:11px;border:none;border-radius:8px;
-      background:var(--primary);color:#fff;font-weight:700;
-      font-size:0.95em;cursor:pointer;margin-top:14px;
-    }
+    button.primary{width:100%;padding:11px;border:none;border-radius:8px;background:var(--p);color:#fff;font-weight:700;font-size:.95em;cursor:pointer;margin-top:14px}
     button.primary:hover{background:#1557b0}
-
     .results{margin-top:14px}
-    .result-card{
-      padding:10px 12px;background:var(--card);border-radius:8px;
-      margin-bottom:6px;font-size:0.88em;cursor:pointer;
-      border-left:4px solid var(--primary);transition:background .2s;
-    }
+    .result-card{padding:10px 12px;background:var(--card);border-radius:8px;margin-bottom:6px;font-size:.88em;cursor:pointer;border-left:4px solid var(--p);transition:background .2s}
     .result-card:hover{background:#e3ecfa}
-    .result-card .name{font-weight:700}
-    .result-card .meta{color:var(--muted);font-size:0.82em}
-
-    .route-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:12px}
-    .stat{text-align:center;background:#e3ecfa;padding:8px;border-radius:8px}
-    .stat .val{font-size:1.2em;font-weight:800;color:var(--primary)}
-    .stat .lbl{font-size:0.72em;color:#666}
-
-    .badge{display:inline-block;padding:2px 8px;border-radius:12px;
-      font-size:0.78em;font-weight:700;margin-right:4px;color:#fff}
-
-    .live-info{
-      background:#e8f8e8;border-radius:8px;padding:10px;
-      font-size:0.85em;color:var(--success);margin-bottom:10px;
-      text-align:center;font-weight:600;
-    }
-
-    /* autocomplete */
-    .ac-wrap{position:relative}
-    .ac-drop{
-      position:absolute;top:100%;left:0;right:0;z-index:2000;
-      background:#fff;border:1px solid #ddd;border-radius:0 0 8px 8px;
-      max-height:260px;overflow-y:auto;
-      box-shadow:0 4px 16px rgba(0,0,0,0.15);
-    }
-    .ac-drop:empty{display:none}
-    .ac-item{
-      padding:10px 12px;cursor:pointer;
-      border-bottom:1px solid #f0f0f0;
-      display:flex;justify-content:space-between;align-items:center;
-    }
-    .ac-item:hover{background:#e3ecfa}
-    .ac-item:last-child{border-bottom:none;border-radius:0 0 8px 8px}
-    .ac-name{font-weight:600;font-size:0.9em}
-    .ac-meta{font-size:0.78em;color:var(--muted)}
-
-    .op-row{display:flex;gap:4px;margin-top:8px}
-    .op-btn{
-      flex:1;padding:6px;border:2px solid #ddd;border-radius:8px;
-      background:#fff;cursor:pointer;font-weight:600;
-      font-size:0.78em;text-align:center;transition:all .2s;
-    }
-    .op-btn.active{border-color:var(--primary);background:#e3ecfa}
-    .op-btn .op-status{font-size:0.7em;display:block;margin-top:2px}
-
-    .toggle-row{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:0.85em}
+    .result-card .name{font-weight:700}.result-card .meta{color:var(--m);font-size:.82em}
+    .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:.78em;font-weight:700;margin-right:4px;color:#fff}
+    .live-info{border-radius:8px;padding:10px;font-size:.85em;margin-bottom:10px;text-align:center;font-weight:600}
+    .toggle-row{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:.85em}
     .toggle-row input[type=checkbox]{width:auto}
-
-    #status{margin-top:10px;padding:8px;border-radius:6px;font-size:0.82em;display:none}
-    #status.info{display:block;background:#e3ecfa;color:var(--primary)}
-    #status.error{display:block;background:#fde8e8;color:var(--danger)}
-    #status.success{display:block;background:#e8f8e8;color:var(--success)}
-
-    .pareto-card{
-      padding:10px 12px;background:var(--card);border-radius:8px;
-      margin-bottom:6px;font-size:0.85em;cursor:pointer;
-      border-left:4px solid var(--warning);
-    }
-    .pareto-card:hover{background:#fef5e3}
-    .pareto-objs{display:flex;gap:12px;margin-top:4px}
-    .pareto-obj{font-size:0.8em;color:var(--muted)}
-    .pareto-obj b{color:var(--text)}
+    .ac-wrap{position:relative}
+    .ac-drop{position:absolute;top:100%;left:0;right:0;z-index:2000;background:#fff;border:1px solid #ddd;border-radius:0 0 8px 8px;max-height:260px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.15)}
+    .ac-drop:empty{display:none}
+    .ac-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center}
+    .ac-item:hover{background:#e3ecfa}.ac-item:last-child{border-bottom:none}
+    .ac-name{font-weight:600;font-size:.9em}.ac-meta{font-size:.78em;color:var(--m)}
+    .op-row{display:flex;gap:4px;margin-top:6px}
+    .op-btn{flex:1;padding:5px;border:2px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-weight:600;font-size:.75em;text-align:center;transition:all .2s}
+    .op-btn.active{border-color:var(--p);background:#e3ecfa}
+    .op-status{font-size:.65em;display:block;margin-top:1px}
+    #status{margin-top:10px;padding:8px;border-radius:6px;font-size:.82em;display:none}
+    #status.info{display:block;background:#e3ecfa;color:var(--p)}
+    #status.error{display:block;background:#fde8e8;color:var(--r)}
+    #status.success{display:block;background:#e8f8e8;color:var(--g)}
+    .journey-card{padding:12px;background:var(--card);border-radius:10px;margin-bottom:8px;border-left:4px solid var(--p);cursor:pointer}
+    .journey-card:hover{background:#e3ecfa}
+    .journey-leg{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.85em}
+    .leg-line{background:#ff6b35;color:#fff;padding:2px 8px;border-radius:8px;font-weight:700;font-size:.8em;white-space:nowrap}
+    .leg-walk{background:#aaa;color:#fff;padding:2px 8px;border-radius:8px;font-size:.75em}
+    .leg-arrow{color:var(--m);font-size:.8em}
+    .leg-time{font-weight:700;font-size:.85em}
+    .leg-delay{color:var(--r);font-size:.75em;font-weight:700}
+    .j-summary{display:flex;gap:16px;margin-bottom:8px;font-size:.82em;color:var(--m)}
+    .j-summary b{color:#333}
+    .track-legend{position:absolute;bottom:20px;right:10px;z-index:1000;background:var(--bg);padding:8px 12px;border-radius:8px;font-size:.75em;box-shadow:0 2px 8px rgba(0,0,0,.1)}
   </style>
 </head>
 <body>
@@ -135,133 +67,126 @@
 
 <div id="sidebar">
   <h1>🚆 EU Rail Tracker</h1>
-  <div class="sub">Live trains · Route optimizer · Delay heatmap</div>
+  <div class="sub">Live trains · Real-time routing · Delay analytics</div>
 
-  <label>Operator <span style="font-weight:400;color:var(--muted)">(for search & departures)</span></label>
+  <label>Operator</label>
   <div class="op-row">
-    <div class="op-btn active" onclick="setOp('db',this)">🇩🇪 DB<span class="op-status" style="color:var(--success)">✅ stable</span></div>
-    <div class="op-btn" onclick="setOp('sbb',this)">🇨🇭 SBB<span class="op-status" style="color:var(--success)">✅ stable</span></div>
-    <div class="op-btn" onclick="setOp('oebb',this)">🇦🇹 ÖBB<span class="op-status" style="color:var(--warning)">⚠️ beta</span></div>
-    <div class="op-btn" onclick="setOp('sncf',this)">🇫🇷 SNCF<span class="op-status" style="color:var(--warning)">⚠️ beta</span></div>
+    <div class="op-btn active" onclick="setOp('db',this)">🇩🇪 DB<span class="op-status" style="color:var(--g)">✅</span></div>
+    <div class="op-btn" onclick="setOp('sbb',this)">🇨🇭 SBB<span class="op-status" style="color:var(--g)">✅</span></div>
+    <div class="op-btn" onclick="setOp('oebb',this)">🇦🇹 ÖBB<span class="op-status" style="color:var(--w)">⚠️</span></div>
+    <div class="op-btn" onclick="setOp('sncf',this)">🇫🇷 SNCF<span class="op-status" style="color:var(--w)">⚠️</span></div>
   </div>
 
-  <div class="tabs" style="margin-top:14px">
+  <div class="tabs" style="margin-top:12px">
     <button class="tab active" onclick="switchTab('live')">🔴 Live Map</button>
-    <button class="tab" onclick="switchTab('route')">🗺️ Route</button>
-    <button class="tab" onclick="switchTab('pareto')">⚖️ Pareto</button>
+    <button class="tab" onclick="switchTab('route')">🚄 Journeys</button>
+    <button class="tab" onclick="switchTab('graph')">🧮 Graph</button>
     <button class="tab" onclick="switchTab('delays')">📊 Delays</button>
-    <button class="tab" onclick="switchTab('search')">🔍 Explore</button>
+    <button class="tab" onclick="switchTab('explore')">🔍 Explore</button>
   </div>
 
-  <!-- ══ LIVE MAP ══ -->
+  <!-- ══ LIVE ══ -->
   <div id="panel-live" class="panel active">
-    <div class="live-info" id="live-info">Zoom into a region to see live trains</div>
+    <div class="live-info" id="live-info" style="background:#e3ecfa;color:var(--p)">Zoom into Germany to see live trains</div>
     <div class="toggle-row">
-      <input type="checkbox" id="auto-refresh" checked />
-      <label for="auto-refresh" style="margin:0">Auto-refresh every 60s</label>
+      <input type="checkbox" id="auto-refresh" checked/>
+      <label for="auto-refresh" style="margin:0">Auto-refresh 60s</label>
     </div>
-    <button class="primary" onclick="fetchRadar()" style="margin-top:10px">🔄 Refresh Now</button>
+    <div class="toggle-row">
+      <input type="checkbox" id="show-rail-tracks" checked/>
+      <label for="show-rail-tracks" style="margin:0">Show rail tracks</label>
+    </div>
+    <button class="primary" onclick="fetchRadar()">🔄 Refresh Now</button>
     <div id="live-results" class="results"></div>
   </div>
 
-  <!-- ══ ROUTE ══ -->
+  <!-- ══ JOURNEYS (real timetable) ══ -->
   <div id="panel-route" class="panel">
     <label>From</label>
     <div class="ac-wrap">
-      <input id="route-from" placeholder="Type a station name..." autocomplete="off" />
-      <div class="ac-drop" id="route-from-drop"></div>
+      <input id="j-from" placeholder="Type station name..." autocomplete="off"/>
+      <div class="ac-drop" id="j-from-drop"></div>
     </div>
     <label>To</label>
     <div class="ac-wrap">
-      <input id="route-to" placeholder="Type a station name..." autocomplete="off" />
-      <div class="ac-drop" id="route-to-drop"></div>
+      <input id="j-to" placeholder="Type station name..." autocomplete="off"/>
+      <div class="ac-drop" id="j-to-drop"></div>
     </div>
-    <div class="row">
-      <div><label>Algorithm</label>
-        <select id="r-algo"><option value="astar">A*</option><option value="dijkstra">Dijkstra</option></select></div>
-      <div><label>Optimize</label>
-        <select id="r-weight"><option value="duration">⏱ Duration</option><option value="distance">📏 Distance</option></select></div>
-    </div>
-    <button class="primary" onclick="findRoute()">Find Optimal Route</button>
-    <div id="route-results" class="results"></div>
+    <button class="primary" onclick="searchJourneys()">🔍 Search Connections</button>
+    <div id="journey-results" class="results"></div>
   </div>
 
-  <!-- ══ PARETO ══ -->
-  <div id="panel-pareto" class="panel">
+  <!-- ══ GRAPH (educational) ══ -->
+  <div id="panel-graph" class="panel">
+    <p style="font-size:.82em;color:var(--m);margin-bottom:8px">Graph-based route analysis (Dijkstra / A* on station network)</p>
     <label>From</label>
     <div class="ac-wrap">
-      <input id="pareto-from" placeholder="Type a station name..." autocomplete="off" />
-      <div class="ac-drop" id="pareto-from-drop"></div>
+      <input id="g-from" placeholder="Type station name..." autocomplete="off"/>
+      <div class="ac-drop" id="g-from-drop"></div>
     </div>
     <label>To</label>
     <div class="ac-wrap">
-      <input id="pareto-to" placeholder="Type a station name..." autocomplete="off" />
-      <div class="ac-drop" id="pareto-to-drop"></div>
+      <input id="g-to" placeholder="Type station name..." autocomplete="off"/>
+      <div class="ac-drop" id="g-to-drop"></div>
     </div>
-    <button class="primary" onclick="findPareto()">Find Pareto Routes</button>
-    <div id="pareto-results" class="results"></div>
+    <div class="row">
+      <div><label>Algorithm</label><select id="g-algo"><option value="astar">A*</option><option value="dijkstra">Dijkstra</option></select></div>
+      <div><label>Weight</label><select id="g-weight"><option value="duration">⏱ Time</option><option value="distance">📏 Dist</option></select></div>
+    </div>
+    <button class="primary" onclick="findGraphRoute()">Compute Route</button>
+    <div id="graph-results" class="results"></div>
   </div>
 
   <!-- ══ DELAYS ══ -->
   <div id="panel-delays" class="panel">
     <label>Country (optional)</label>
-    <input id="delay-country" placeholder="DE, AT, CH, FR..." />
+    <input id="delay-country" placeholder="DE, AT, CH, FR..."/>
     <button class="primary" onclick="loadHeatmap()">Load Delay Heatmap</button>
-    <p style="font-size:0.78em;color:var(--muted);margin-top:8px">
-      💡 View station departures first to collect delay data.</p>
+    <p style="font-size:.78em;color:var(--m);margin-top:8px">💡 Explore station departures first to collect delay data.</p>
     <div id="delay-results" class="results"></div>
   </div>
 
   <!-- ══ EXPLORE ══ -->
-  <div id="panel-search" class="panel">
+  <div id="panel-explore" class="panel">
     <label>Search stations</label>
     <div class="ac-wrap">
-      <input id="search-input" placeholder="Berlin, Milano, Wien..." autocomplete="off" />
-      <div class="ac-drop" id="search-input-drop"></div>
+      <input id="ex-input" placeholder="Berlin, Milano, Wien..." autocomplete="off"/>
+      <div class="ac-drop" id="ex-input-drop"></div>
     </div>
-    <div id="search-results" class="results"></div>
+    <div id="explore-results" class="results"></div>
   </div>
 
   <div id="status"></div>
 </div>
 
-<script>
-// ══════════════════════════════════════
-//  GLOBALS
-// ══════════════════════════════════════
-const API = location.origin + '/api';
-let OP = 'db';
-let currentTab = 'live';
-let radarTimer = null;
+<div class="track-legend" id="track-legend" style="display:none">
+  <b>🛤️ Rail tracks</b> (OpenStreetMap)
+</div>
 
-// ══════════════════════════════════════
-//  MAP
-// ══════════════════════════════════════
-const map = L.map('map').setView([48.5, 9.0], 6);
+<script>
+const API = location.origin + '/api';
+let OP = 'db', currentTab = 'live', radarTimer = null;
+const FLAGS = {DE:'🇩🇪',AT:'🇦🇹',CH:'🇨🇭',FR:'🇫🇷',IT:'🇮🇹',NL:'🇳🇱',BE:'🇧🇪',ES:'🇪🇸',CZ:'🇨🇿',PL:'🇵🇱',GB:'🇬🇧',SE:'🇸🇪',DK:'🇩🇰',HU:'🇭🇺',HR:'🇭🇷',SI:'🇸🇮',SK:'🇸🇰',RO:'🇷🇴',LU:'🇱🇺',PT:'🇵🇹',NO:'🇳🇴',FI:'🇫🇮'};
+
+// ═══════ MAP ═══════
+const map = L.map('map').setView([50.5, 10.0], 6);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
   attribution:'© OSM © CARTO', maxZoom:18
 }).addTo(map);
 
-const trainIcon = sz => L.divIcon({html:`<div style="font-size:${sz}px">🚆</div>`,
-  iconSize:[sz+4,sz+4],iconAnchor:[(sz+4)/2,(sz+4)/2],className:''});
-const stIcon = L.divIcon({html:'<div style="font-size:14px">📍</div>',
-  iconSize:[18,18],iconAnchor:[9,9],className:''});
+const L_trains  = L.layerGroup().addTo(map);
+const L_route   = L.layerGroup().addTo(map);
+const L_station = L.layerGroup().addTo(map);
+const L_heat    = L.layerGroup().addTo(map);
+const L_tracks  = L.layerGroup().addTo(map);
 
-const layers = {
-  trains:  L.layerGroup().addTo(map),
-  route:   L.layerGroup().addTo(map),
-  station: L.layerGroup().addTo(map),
-  heat:    L.layerGroup().addTo(map),
-};
+function trainIcon(sz){return L.divIcon({html:`<div style="font-size:${sz}px;cursor:pointer;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))">🚆</div>`,iconSize:[sz+6,sz+6],iconAnchor:[(sz+6)/2,(sz+6)/2],className:''})}
 
-// ══════════════════════════════════════
-//  AUTOCOMPLETE
-// ══════════════════════════════════════
+// ═══════ AUTOCOMPLETE ═══════
 function setupAC(inputId, dropId, onSelect) {
   const inp = document.getElementById(inputId);
   const drop = document.getElementById(dropId);
   let timer;
-
   inp.addEventListener('input', () => {
     clearTimeout(timer);
     timer = setTimeout(async () => {
@@ -271,15 +196,12 @@ function setupAC(inputId, dropId, onSelect) {
         const res = await fetch(`${API}/stations/search?q=${enc(q)}&limit=8&operator=${OP}`);
         const list = await res.json();
         drop.innerHTML = '';
-        if (!list.length) {
-          drop.innerHTML = '<div class="ac-item"><span class="ac-name" style="color:var(--muted)">No stations found</span></div>';
-          return;
-        }
+        if (!list.length) { drop.innerHTML = '<div class="ac-item"><span class="ac-name" style="color:var(--m)">No results</span></div>'; return; }
         list.forEach(s => {
           const el = document.createElement('div');
           el.className = 'ac-item';
-          const flag = {DE:'🇩🇪',AT:'🇦🇹',CH:'🇨🇭',FR:'🇫🇷',IT:'🇮🇹',NL:'🇳🇱',BE:'🇧🇪',ES:'🇪🇸',CZ:'🇨🇿',PL:'🇵🇱',GB:'🇬🇧',SE:'🇸🇪',DK:'🇩🇰',HU:'🇭🇺',HR:'🇭🇷',SI:'🇸🇮',SK:'🇸🇰',RO:'🇷🇴',LU:'🇱🇺',PT:'🇵🇹'}[s.country] || '🏳️';
-          el.innerHTML = `<span class="ac-name">${flag} ${s.name}</span><span class="ac-meta">${s.country || ''}</span>`;
+          const fl = FLAGS[s.country] || '🏳️';
+          el.innerHTML = `<span class="ac-name">${fl} ${s.name}</span><span class="ac-meta">${s.country||''} · ${s.db_id||s.id}</span>`;
           el.onclick = () => {
             inp.value = s.name;
             inp.dataset.sid = s.id;
@@ -291,90 +213,71 @@ function setupAC(inputId, dropId, onSelect) {
           };
           drop.appendChild(el);
         });
-      } catch(e) { console.warn('AC error:', e); }
-    }, 300);
+      } catch(e) { console.warn('AC:', e); }
+    }, 250);
   });
-
   document.addEventListener('click', e => {
     if (!inp.contains(e.target) && !drop.contains(e.target)) drop.innerHTML = '';
   });
 }
 
-// Set up all autocomplete fields
-setupAC('route-from', 'route-from-drop', s => {
-  map.setView([s.coords.latitude, s.coords.longitude], 8);
-});
-setupAC('route-to', 'route-to-drop');
-setupAC('pareto-from', 'pareto-from-drop');
-setupAC('pareto-to', 'pareto-to-drop');
-setupAC('search-input', 'search-input-drop', s => {
-  layers.station.clearLayers();
-  L.marker([s.coords.latitude, s.coords.longitude], {icon: stIcon})
-    .bindPopup(`<b>${s.name}</b><br>ID: ${s.id}<br>Country: ${s.country}`)
-    .addTo(layers.station);
+setupAC('j-from','j-from-drop');
+setupAC('j-to','j-to-drop');
+setupAC('g-from','g-from-drop');
+setupAC('g-to','g-to-drop');
+setupAC('ex-input','ex-input-drop', s => {
+  L_station.clearLayers();
+  L.circleMarker([s.coords.latitude, s.coords.longitude],
+    {radius:8,fillColor:var_p,color:'#fff',weight:2,fillOpacity:1})
+    .bindPopup(`<b>${s.name}</b><br>ID: ${s.id}`)
+    .addTo(L_station);
   map.setView([s.coords.latitude, s.coords.longitude], 10);
-
-  // Show departures for explored station
-  loadStationDepartures(s.db_id || s.id, s.name);
+  loadDepartures(s.db_id||s.id, s.name);
 });
 
-async function loadStationDepartures(stopId, name) {
+const var_p = '#1a73e8';
+
+async function loadDepartures(sid, name) {
   try {
-    const res = await fetch(`${API}/departures/${stopId}?operator=${OP}&duration=60`);
+    const res = await fetch(`${API}/departures/${sid}?operator=${OP}&duration=60`);
     if (!res.ok) return;
     const deps = await res.json();
-    const c = document.getElementById('search-results');
-    c.innerHTML = `<p style="font-size:0.85em;font-weight:600;margin-bottom:8px">${name} — next departures:</p>`;
-    if (!deps.length) { c.innerHTML += '<p style="color:var(--muted)">No departures found</p>'; return; }
-    deps.slice(0, 15).forEach(d => {
-      const delay = d.delay_seconds;
-      let badge = '';
-      if (delay != null) {
-        const m = Math.round(delay / 60);
-        if (m <= 0) badge = '<span class="badge" style="background:var(--success)">on time</span>';
-        else if (m <= 5) badge = `<span class="badge" style="background:var(--warning)">+${m}m</span>`;
-        else badge = `<span class="badge" style="background:var(--danger)">+${m}m</span>`;
+    const c = document.getElementById('explore-results');
+    c.innerHTML = `<p style="font-size:.85em;font-weight:600;margin-bottom:8px">📋 ${name}</p>`;
+    if (!deps.length) { c.innerHTML += '<p style="color:var(--m)">No departures</p>'; return; }
+    deps.slice(0,15).forEach(d => {
+      const dl = d.delay_seconds;
+      let bdg = '';
+      if (dl != null) {
+        const m = Math.round(dl/60);
+        if (m<=0) bdg='<span class="badge" style="background:var(--g)">on time</span>';
+        else if (m<=5) bdg=`<span class="badge" style="background:var(--w)">+${m}m</span>`;
+        else bdg=`<span class="badge" style="background:var(--r)">+${m}m</span>`;
       }
-      const time = (d.planned_time||'').slice(11,16);
-      c.innerHTML += `<div class="result-card">
-        <div class="name">${d.line_name} → ${d.direction} ${badge}</div>
-        <div class="meta">${time} · Platform ${d.platform||'?'}</div>
-      </div>`;
+      const t = (d.planned_time||'').slice(11,16);
+      c.innerHTML += `<div class="result-card"><div class="name">${d.line_name} → ${d.direction} ${bdg}</div><div class="meta">${t} · Pl. ${d.platform||'?'}</div></div>`;
     });
-  } catch(e) { console.warn('Departures error:', e); }
+  } catch(e) {}
 }
 
-// ══════════════════════════════════════
-//  OPERATOR
-// ══════════════════════════════════════
-function setOp(op, el) {
-  OP = op;
-  document.querySelectorAll('.op-btn').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
-}
-
-// ══════════════════════════════════════
-//  TABS
-// ══════════════════════════════════════
+// ═══════ UTILS ═══════
+function setOp(op, el) { OP=op; document.querySelectorAll('.op-btn').forEach(b=>b.classList.remove('active')); el.classList.add('active'); }
 function switchTab(name) {
-  currentTab = name;
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  currentTab=name;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   event.target.classList.add('active');
-  document.getElementById('panel-' + name).classList.add('active');
-
-  if (name === 'live') { fetchRadar(); startTimer(); }
-  else { stopTimer(); }
+  document.getElementById('panel-'+name).classList.add('active');
+  if(name==='live'){fetchRadar();startTimer()}else{stopTimer()}
 }
+function setStatus(m,t='info'){const e=document.getElementById('status');e.textContent=m;e.className=t}
+function fmtDur(m){const h=Math.floor(m/60),mi=Math.round(m%60);return h>0?`${h}h${mi}m`:`${mi}m`}
+function fmtTime(s){if(!s)return'?';return s.slice(11,16)}
+function enc(s){return encodeURIComponent(s)}
 
-function setStatus(msg, type='info') {
-  const el = document.getElementById('status');
-  el.textContent = msg; el.className = type;
-}
+// ═══════ LIVE RADAR ═══════
+let lastTrackBounds = null;
 
-// ══════════════════════════════════════
-//  LIVE RADAR
-// ══════════════════════════════════════
 async function fetchRadar() {
   const zoom = map.getZoom();
   const info = document.getElementById('live-info');
@@ -385,248 +288,328 @@ async function fetchRadar() {
     return;
   }
 
-  info.textContent = '⏳ Loading trains...';
-  info.style.background = '#e3ecfa'; info.style.color = 'var(--primary)';
+  info.textContent = '⏳ Fetching trains...';
+  info.style.background = '#e3ecfa'; info.style.color = 'var(--p)';
 
   const b = map.getBounds();
   try {
-    const res = await fetch(
-      `${API}/radar?north=${b.getNorth()}&south=${b.getSouth()}&east=${b.getEast()}&west=${b.getWest()}`
-    );
-    const trains = await res.json();
-    renderTrains(trains);
+    const res = await fetch(`${API}/radar?north=${b.getNorth()}&south=${b.getSouth()}&east=${b.getEast()}&west=${b.getWest()}`);
+    const data = await res.json();
+    renderTrains(data.trains||[], data.source);
   } catch(e) {
-    info.textContent = '❌ Radar error: ' + e.message;
-    info.style.background = '#fde8e8'; info.style.color = 'var(--danger)';
+    info.textContent = '❌ Error: ' + e.message;
+    info.style.background = '#fde8e8'; info.style.color = 'var(--r)';
+  }
+
+  // Load rail tracks
+  if (document.getElementById('show-rail-tracks').checked) {
+    loadRailTracks();
   }
 }
 
-function renderTrains(trains) {
-  layers.trains.clearLayers();
+function renderTrains(trains, source) {
+  L_trains.clearLayers();
   const info = document.getElementById('live-info');
-  const container = document.getElementById('live-results');
+  const c = document.getElementById('live-results');
+  const srcLabel = source === 'radar' ? 'DB Radar' : 'Station interpolation';
 
   if (!trains.length) {
-    info.textContent = 'No trains in this area. Try panning to Germany.';
+    info.textContent = `No trains found via ${srcLabel}. Try zooming into Germany.`;
     info.style.background = '#fef5e3'; info.style.color = '#e67e22';
-    container.innerHTML = '';
+    c.innerHTML = '';
     return;
   }
 
-  info.textContent = `🟢 ${trains.length} trains visible · auto-refreshing`;
-  info.style.background = '#e8f8e8'; info.style.color = 'var(--success)';
+  info.innerHTML = `🟢 <b>${trains.length}</b> trains · ${srcLabel}`;
+  info.style.background = '#e8f8e8'; info.style.color = 'var(--g)';
 
-  container.innerHTML = '';
-  const iconSz = map.getZoom() >= 10 ? 22 : 16;
+  c.innerHTML = '';
+  const sz = map.getZoom() >= 10 ? 24 : map.getZoom() >= 8 ? 20 : 16;
 
-  trains.forEach(t => {
-    const marker = L.marker([t.coords.latitude, t.coords.longitude], {icon: trainIcon(iconSz)})
-      .bindPopup(`
-        <b>${t.line_name}</b><br>
-        → ${t.direction}<br>
-        ${t.prev_station ? t.prev_station + ' → ' + t.next_station : ''}
-      `).addTo(layers.trains);
-
-    container.innerHTML += `
-      <div class="result-card" onclick="map.setView([${t.coords.latitude},${t.coords.longitude}],12)">
-        <span class="badge" style="background:#ff6b35">${t.line_name}</span>
-        <span class="name">${t.direction || 'Unknown'}</span>
-        <div class="meta">${t.prev_station || ''} ${t.prev_station ? '→' : ''} ${t.next_station || ''}</div>
+  trains.forEach((t, i) => {
+    const popup = `
+      <div style="min-width:200px">
+        <div style="font-size:1.1em;font-weight:700;margin-bottom:4px">${t.line_name || '?'}</div>
+        <div style="color:#555;margin-bottom:6px">→ ${t.direction || 'Unknown'}</div>
+        ${t.prev_station ? `<div style="font-size:.85em">📍 ${t.prev_station} → ${t.next_station}</div>` : ''}
+        ${t.speed_kmh ? `<div style="font-size:.85em">🏃 ~${t.speed_kmh} km/h</div>` : ''}
+        ${t.progress != null ? `<div style="font-size:.85em">📊 Progress: ${(t.progress*100).toFixed(0)}%</div>` : ''}
+        ${t.trip_id ? `<div style="margin-top:8px"><a href="#" onclick="loadTripPopup('${enc(t.trip_id)}');return false" style="color:var(--p);font-weight:600">View all stops →</a></div>` : ''}
       </div>`;
+
+    L.marker([t.coords.latitude, t.coords.longitude], {icon: trainIcon(sz)})
+      .bindPopup(popup, {maxWidth: 300})
+      .addTo(L_trains);
+
+    if (i < 50) {
+      c.innerHTML += `<div class="result-card" onclick="map.setView([${t.coords.latitude},${t.coords.longitude}],12)">
+        <span class="badge" style="background:#ff6b35">${t.line_name||'?'}</span>
+        <span class="name">${t.direction||'—'}</span>
+        ${t.prev_station ? `<div class="meta">${t.prev_station} → ${t.next_station}</div>` : ''}
+      </div>`;
+    }
   });
+
+  if (trains.length > 50) {
+    c.innerHTML += `<p style="color:var(--m);font-size:.82em;text-align:center">+ ${trains.length-50} more trains on map</p>`;
+  }
 }
 
-// Auto-refresh
+// Load trip details in popup
+async function loadTripPopup(tripId) {
+  try {
+    const res = await fetch(`${API}/trip/${tripId}?operator=${OP}`);
+    if (!res.ok) { alert('Could not load trip details'); return; }
+    const trip = await res.json();
+    let html = `<div style="max-height:300px;overflow-y:auto;min-width:250px">
+      <div style="font-weight:700;font-size:1.1em;margin-bottom:6px">${trip.line_name} → ${trip.direction}</div>`;
+    trip.stopovers.forEach((so, i) => {
+      const arr = fmtTime(so.arrival);
+      const dep = fmtTime(so.departure);
+      const dl = so.delay_seconds;
+      let dlStr = '';
+      if (dl != null && dl > 0) dlStr = ` <span style="color:var(--r);font-weight:700">+${Math.round(dl/60)}m</span>`;
+      html += `<div style="padding:3px 0;font-size:.85em;${i===0||i===trip.stopovers.length-1?'font-weight:700':''}">
+        ${arr !== '?' ? arr : dep} ${so.station.name}${dlStr}</div>`;
+    });
+    html += '</div>';
+
+    L.popup({maxWidth:320, maxHeight:400})
+      .setLatLng(map.getCenter())
+      .setContent(html)
+      .openOn(map);
+  } catch(e) { console.warn('Trip load error:', e); }
+}
+
+// Rail tracks
+async function loadRailTracks() {
+  const zoom = map.getZoom();
+  if (zoom < 9) { L_tracks.clearLayers(); document.getElementById('track-legend').style.display='none'; return; }
+
+  const b = map.getBounds();
+  const boundsKey = `${b.getSouth().toFixed(2)},${b.getWest().toFixed(2)},${b.getNorth().toFixed(2)},${b.getEast().toFixed(2)}`;
+  if (boundsKey === lastTrackBounds) return;
+  lastTrackBounds = boundsKey;
+
+  try {
+    const res = await fetch(`${API}/geometry/network?min_lat=${b.getSouth()}&min_lon=${b.getWest()}&max_lat=${b.getNorth()}&max_lon=${b.getEast()}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    L_tracks.clearLayers();
+    data.lines.forEach(line => {
+      const ll = line.map(c => [c[1], c[0]]);
+      L.polyline(ll, {color:'#666', weight:1.5, opacity:0.4}).addTo(L_tracks);
+    });
+    document.getElementById('track-legend').style.display = data.count > 0 ? 'block' : 'none';
+  } catch(e) { console.warn('Tracks:', e); }
+}
+
+document.getElementById('show-rail-tracks').onchange = function() {
+  if (this.checked) { loadRailTracks(); } else { L_tracks.clearLayers(); document.getElementById('track-legend').style.display='none'; lastTrackBounds=null; }
+};
+
+// Auto-refresh & map events
 let moveTimer;
 map.on('moveend', () => {
   if (currentTab !== 'live') return;
   clearTimeout(moveTimer);
-  moveTimer = setTimeout(fetchRadar, 800);
+  moveTimer = setTimeout(fetchRadar, 600);
 });
 
-function startTimer() {
-  stopTimer();
-  if (document.getElementById('auto-refresh').checked) {
-    radarTimer = setInterval(fetchRadar, 60000);
-  }
-}
-function stopTimer() {
-  if (radarTimer) { clearInterval(radarTimer); radarTimer = null; }
-}
+function startTimer() { stopTimer(); if (document.getElementById('auto-refresh').checked) radarTimer = setInterval(fetchRadar, 60000); }
+function stopTimer() { if (radarTimer) { clearInterval(radarTimer); radarTimer = null; } }
+document.getElementById('auto-refresh').onchange = () => { if (currentTab==='live') startTimer(); };
 
-document.getElementById('auto-refresh').onchange = () => {
-  if (currentTab === 'live') startTimer();
-};
-
-// Initial fetch
-setTimeout(fetchRadar, 500);
+setTimeout(fetchRadar, 300);
 startTimer();
 
-// ══════════════════════════════════════
-//  ROUTE OPTIMIZER
-// ══════════════════════════════════════
-async function findRoute() {
-  const fromInp = document.getElementById('route-from');
-  const toInp = document.getElementById('route-to');
-  const fromId = fromInp.dataset.sid;
-  const toId = toInp.dataset.sid;
+// ═══════ JOURNEY SEARCH ═══════
+async function searchJourneys() {
+  const fromInp = document.getElementById('j-from');
+  const toInp = document.getElementById('j-to');
+  const fromId = fromInp.dataset.dbid;
+  const toId = toInp.dataset.dbid;
 
-  if (!fromId || !toId) {
-    setStatus('Please select stations from the dropdown suggestions', 'error');
-    return;
-  }
+  if (!fromId || !toId) { setStatus('Select stations from the dropdown','error'); return; }
 
-  setStatus('Computing route...', 'info');
-  layers.route.clearLayers();
-
-  const algo = document.getElementById('r-algo').value;
-  const weight = document.getElementById('r-weight').value;
+  setStatus('Searching connections...','info');
+  L_route.clearLayers();
 
   try {
-    const res = await fetch(
-      `${API}/route/optimize?from_id=${enc(fromId)}&to_id=${enc(toId)}&algorithm=${algo}&weight=${weight}`
-    );
+    const res = await fetch(`${API}/journey/search?from_id=${enc(fromId)}&to_id=${enc(toId)}&results=5&operator=${OP}`);
     if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
-    const route = await res.json();
-    renderRoute(route, 'route-results');
+    const data = await res.json();
+    renderJourneys(data.journeys);
   } catch(e) {
-    setStatus('Route error: ' + e.message, 'error');
+    setStatus('Error: '+e.message, 'error');
   }
 }
 
-function renderRoute(route, containerId) {
-  const c = document.getElementById(containerId);
-  c.innerHTML = `<div class="route-stats">
-    <div class="stat"><div class="val">${fmtDur(route.total_duration_minutes)}</div><div class="lbl">Duration</div></div>
-    <div class="stat"><div class="val">${route.total_distance_km.toFixed(0)}</div><div class="lbl">km</div></div>
-    <div class="stat"><div class="val">${route.num_stops}</div><div class="lbl">Stops</div></div>
-  </div>`;
+function renderJourneys(journeys) {
+  const c = document.getElementById('journey-results');
+  c.innerHTML = `<p style="font-size:.82em;color:var(--m);margin-bottom:8px">${journeys.length} connections found</p>`;
+  const colors = ['#1a73e8','#e74c3c','#2ecc71','#f39c12','#9b59b6'];
 
-  const latlngs = [];
-  route.segments.forEach((seg, i) => {
-    latlngs.push([seg.from_station.coords.latitude, seg.from_station.coords.longitude]);
-    if (i === route.segments.length - 1)
-      latlngs.push([seg.to_station.coords.latitude, seg.to_station.coords.longitude]);
+  journeys.forEach((j, idx) => {
+    const col = colors[idx % colors.length];
+    const depTime = fmtTime(j.departure);
+    const arrTime = fmtTime(j.arrival);
 
-    L.circleMarker([seg.from_station.coords.latitude, seg.from_station.coords.longitude],
-      {radius:6,fillColor:'var(--primary)',color:'#fff',weight:2,fillOpacity:1})
-      .bindPopup(`<b>${seg.from_station.name}</b>`).addTo(layers.route);
+    // Calculate duration
+    let durStr = '';
+    if (j.departure && j.arrival) {
+      const d1 = new Date(j.departure), d2 = new Date(j.arrival);
+      const mins = Math.round((d2 - d1) / 60000);
+      durStr = fmtDur(mins);
+    }
 
-    c.innerHTML += `<div class="result-card">
-      <div class="name">${seg.from_station.name} → ${seg.to_station.name}</div>
-      <div class="meta">${seg.distance_km} km · ${fmtDur(seg.duration_minutes)}</div>
-    </div>`;
-  });
-
-  const last = route.segments[route.segments.length-1].to_station;
-  L.circleMarker([last.coords.latitude, last.coords.longitude],
-    {radius:8,fillColor:'var(--danger)',color:'#fff',weight:2,fillOpacity:1})
-    .bindPopup(`<b>${last.name}</b> 🏁`).addTo(layers.route);
-
-  L.polyline(latlngs,{color:'#1a73e8',weight:4,opacity:0.8,dashArray:'8,8'}).addTo(layers.route);
-  map.fitBounds(latlngs,{padding:[50,400]});
-  document.getElementById('status').className = '';
-}
-
-// ══════════════════════════════════════
-//  PARETO
-// ══════════════════════════════════════
-async function findPareto() {
-  const fromId = document.getElementById('pareto-from').dataset.sid;
-  const toId = document.getElementById('pareto-to').dataset.sid;
-  if (!fromId || !toId) { setStatus('Select stations from suggestions','error'); return; }
-
-  setStatus('Computing Pareto routes...','info');
-  layers.route.clearLayers();
-
-  try {
-    const res = await fetch(`${API}/route/pareto?from_id=${enc(fromId)}&to_id=${enc(toId)}`);
-    if (!res.ok) throw new Error((await res.json()).detail);
-    const data = await res.json();
-    const c = document.getElementById('pareto-results');
-    c.innerHTML = `<p style="font-size:0.85em;color:var(--muted);margin-bottom:8px">
-      ${data.routes.length} Pareto solutions (${data.total_explored.toLocaleString()} explored)</p>`;
-
-    const colors = ['#1a73e8','#e74c3c','#2ecc71','#f39c12','#9b59b6','#1abc9c'];
+    let legsHtml = '';
     const allLL = [];
 
-    data.routes.forEach((pr, i) => {
-      const o = pr.objectives;
-      const col = colors[i % colors.length];
-      c.innerHTML += `<div class="pareto-card" style="border-left-color:${col}">
-        <div class="name">Route ${i+1}</div>
-        <div class="pareto-objs">
-          <span class="pareto-obj">⏱ <b>${fmtDur(o.duration_minutes)}</b></span>
-          <span class="pareto-obj">🔄 <b>${o.transfers}</b></span>
-          <span class="pareto-obj">📏 <b>${o.distance_km.toFixed(0)} km</b></span>
-        </div>
+    j.legs.forEach(leg => {
+      if (leg.walking) {
+        legsHtml += `<div class="journey-leg"><span class="leg-walk">🚶 Walk</span><span>${leg.origin} → ${leg.destination}</span></div>`;
+        return;
+      }
+
+      const depDl = leg.dep_delay ? `<span class="leg-delay">+${Math.round(leg.dep_delay/60)}m</span>` : '';
+      legsHtml += `<div class="journey-leg">
+        <span class="leg-time">${fmtTime(leg.departure)}</span>
+        <span class="leg-line">${leg.line || leg.product || '?'}</span>
+        <span class="leg-arrow">${leg.origin} → ${leg.destination}</span>
+        <span class="leg-time">${fmtTime(leg.arrival)}</span>
+        ${depDl}
       </div>`;
 
-      const ll = [];
-      pr.route.segments.forEach(s => {
-        ll.push([s.from_station.coords.latitude, s.from_station.coords.longitude]);
-        ll.push([s.to_station.coords.latitude, s.to_station.coords.longitude]);
-      });
-      if (ll.length) {
-        L.polyline(ll,{color:col,weight:3,opacity:0.7}).addTo(layers.route);
-        allLL.push(...ll);
+      // Draw on map
+      if (leg.origin_lat && leg.dest_lat) {
+        const from = [leg.origin_lat, leg.origin_lon];
+        const to = [leg.dest_lat, leg.dest_lon];
+        allLL.push(from, to);
+
+        // Line between stations
+        L.polyline([from, to], {color:col, weight:4, opacity:0.8}).addTo(L_route);
+
+        // Station markers
+        L.circleMarker(from, {radius:6, fillColor:col, color:'#fff', weight:2, fillOpacity:1})
+          .bindPopup(`<b>${leg.origin}</b><br>${fmtTime(leg.departure)} · Pl. ${leg.platform||'?'}`)
+          .addTo(L_route);
+
+        // Draw stopovers if available
+        if (leg.stopovers && leg.stopovers.length > 0) {
+          const soLL = leg.stopovers.filter(s=>s.lat&&s.lon).map(s=>[s.lat,s.lon]);
+          if (soLL.length >= 2) {
+            L.polyline(soLL, {color:col, weight:4, opacity:0.8}).addTo(L_route);
+            allLL.push(...soLL);
+          }
+          leg.stopovers.forEach(s => {
+            if (s.lat && s.lon) {
+              L.circleMarker([s.lat, s.lon], {radius:3, fillColor:col, color:'#fff', weight:1, fillOpacity:.7})
+                .bindPopup(`${s.name}<br>${fmtTime(s.arrival)||fmtTime(s.departure)||''}`)
+                .addTo(L_route);
+            }
+          });
+        }
       }
     });
 
-    if (allLL.length) map.fitBounds(allLL,{padding:[50,400]});
-    setStatus(`${data.routes.length} Pareto routes found`,'success');
-  } catch(e) { setStatus('Error: '+e.message,'error'); }
+    // Destination marker
+    const lastLeg = j.legs[j.legs.length - 1];
+    if (lastLeg && lastLeg.dest_lat) {
+      L.circleMarker([lastLeg.dest_lat, lastLeg.dest_lon],
+        {radius:8, fillColor:'#d32f2f', color:'#fff', weight:2, fillOpacity:1})
+        .bindPopup(`<b>${lastLeg.destination}</b> 🏁<br>${fmtTime(lastLeg.arrival)}`)
+        .addTo(L_route);
+    }
+
+    c.innerHTML += `<div class="journey-card" style="border-left-color:${col}" onclick="map.fitBounds(${JSON.stringify(allLL)},{padding:[50,400]})">
+      <div class="j-summary">
+        <span>🕐 <b>${depTime} → ${arrTime}</b></span>
+        <span>⏱ <b>${durStr}</b></span>
+        <span>🔄 <b>${j.transfers}</b> transfer${j.transfers!==1?'s':''}</span>
+      </div>
+      ${legsHtml}
+    </div>`;
+
+    if (allLL.length) map.fitBounds(allLL, {padding:[50,400]});
+  });
+
+  document.getElementById('status').className = '';
 }
 
-// ══════════════════════════════════════
-//  DELAY HEATMAP
-// ══════════════════════════════════════
+// ═══════ GRAPH ROUTING ═══════
+async function findGraphRoute() {
+  const fromId = document.getElementById('g-from').dataset.sid;
+  const toId = document.getElementById('g-to').dataset.sid;
+  if (!fromId||!toId) { setStatus('Select stations from dropdown','error'); return; }
+
+  setStatus('Computing...','info');
+  L_route.clearLayers();
+
+  const algo = document.getElementById('g-algo').value;
+  const wt = document.getElementById('g-weight').value;
+
+  try {
+    const res = await fetch(`${API}/route/optimize?from_id=${enc(fromId)}&to_id=${enc(toId)}&algorithm=${algo}&weight=${wt}`);
+    if (!res.ok) throw new Error((await res.json()).detail);
+    const route = await res.json();
+
+    const c = document.getElementById('graph-results');
+    c.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:10px 0">
+      <div style="text-align:center;background:#e3ecfa;padding:8px;border-radius:8px"><div style="font-size:1.2em;font-weight:800;color:var(--p)">${fmtDur(route.total_duration_minutes)}</div><div style="font-size:.72em;color:#666">Est. time</div></div>
+      <div style="text-align:center;background:#e3ecfa;padding:8px;border-radius:8px"><div style="font-size:1.2em;font-weight:800;color:var(--p)">${route.total_distance_km.toFixed(0)}</div><div style="font-size:.72em;color:#666">km</div></div>
+      <div style="text-align:center;background:#e3ecfa;padding:8px;border-radius:8px"><div style="font-size:1.2em;font-weight:800;color:var(--p)">${route.num_stops}</div><div style="font-size:.72em;color:#666">stops</div></div>
+    </div>
+    <p style="font-size:.78em;color:var(--m);margin-bottom:8px">⚠️ Estimated times. Use Journeys tab for real schedules.</p>`;
+
+    const ll = [];
+    route.segments.forEach((seg,i) => {
+      ll.push([seg.from_station.coords.latitude, seg.from_station.coords.longitude]);
+      if (i===route.segments.length-1) ll.push([seg.to_station.coords.latitude, seg.to_station.coords.longitude]);
+      L.circleMarker([seg.from_station.coords.latitude, seg.from_station.coords.longitude],
+        {radius:5,fillColor:var_p,color:'#fff',weight:2,fillOpacity:1}).addTo(L_route);
+      c.innerHTML += `<div class="result-card"><div class="name">${seg.from_station.name} → ${seg.to_station.name}</div><div class="meta">${seg.distance_km}km · ~${fmtDur(seg.duration_minutes)}</div></div>`;
+    });
+    const last = route.segments[route.segments.length-1].to_station;
+    L.circleMarker([last.coords.latitude, last.coords.longitude], {radius:8,fillColor:'#d32f2f',color:'#fff',weight:2,fillOpacity:1}).addTo(L_route);
+    L.polyline(ll,{color:'#1a73e8',weight:4,opacity:.8,dashArray:'8,8'}).addTo(L_route);
+    map.fitBounds(ll,{padding:[50,400]});
+    document.getElementById('status').className = '';
+  } catch(e) { setStatus('Error: '+e.message, 'error'); }
+}
+
+// ═══════ DELAY HEATMAP ═══════
 async function loadHeatmap() {
   const country = document.getElementById('delay-country').value.trim();
   setStatus('Loading delays...','info');
-  layers.heat.clearLayers();
-
+  L_heat.clearLayers();
   try {
     const url = `${API}/delays/heatmap` + (country ? `?country=${enc(country)}` : '');
     const res = await fetch(url);
     const data = await res.json();
     const c = document.getElementById('delay-results');
-
-    if (!data.stations || !data.stations.length) {
-      c.innerHTML = '<p style="color:var(--muted)">No delay data. View departures for some stations first!</p>';
-      setStatus('No delay data yet','info'); return;
+    if (!data.stations||!data.stations.length) {
+      c.innerHTML='<p style="color:var(--m)">No delay data. Explore stations first!</p>';
+      setStatus('No data yet','info'); return;
     }
-
-    c.innerHTML = `<p style="font-size:0.82em;color:var(--muted)">${data.stations.length} stations (last ${data.period_hours}h)</p>`;
-    const bounds = [];
-    data.stations.forEach(s => {
-      const r = Math.min(20, Math.max(6, s.total_records));
-      L.circleMarker([s.coords.latitude, s.coords.longitude],
-        {radius:r,fillColor:s.color,color:'#fff',weight:2,fillOpacity:0.8})
+    c.innerHTML=`<p style="font-size:.82em;color:var(--m)">${data.stations.length} stations</p>`;
+    const bounds=[];
+    data.stations.forEach(s=>{
+      const r=Math.min(20,Math.max(6,s.total_records));
+      L.circleMarker([s.coords.latitude,s.coords.longitude],{radius:r,fillColor:s.color,color:'#fff',weight:2,fillOpacity:.8})
         .bindPopup(`<b>${s.station_name}</b><br>Avg: ${(s.avg_delay_seconds/60).toFixed(1)}m<br>On-time: ${s.on_time_pct}%`)
-        .addTo(layers.heat);
-      bounds.push([s.coords.latitude, s.coords.longitude]);
-
-      c.innerHTML += `<div class="result-card" style="border-left-color:${s.color}"
-        onclick="map.setView([${s.coords.latitude},${s.coords.longitude}],12)">
-        <div class="name">${s.station_name}</div>
-        <div class="meta">Avg ${(s.avg_delay_seconds/60).toFixed(1)}m · ${s.on_time_pct}% on-time</div>
-      </div>`;
+        .addTo(L_heat);
+      bounds.push([s.coords.latitude,s.coords.longitude]);
+      c.innerHTML+=`<div class="result-card" style="border-left-color:${s.color}" onclick="map.setView([${s.coords.latitude},${s.coords.longitude}],12)">
+        <div class="name">${s.station_name}</div><div class="meta">Avg ${(s.avg_delay_seconds/60).toFixed(1)}m · ${s.on_time_pct}% on-time</div></div>`;
     });
-    if (bounds.length) map.fitBounds(bounds,{padding:[50,400]});
-    setStatus(`${data.stations.length} stations on heatmap`,'success');
-  } catch(e) { setStatus('Error: '+e.message,'error'); }
+    if(bounds.length)map.fitBounds(bounds,{padding:[50,400]});
+    setStatus(`${data.stations.length} stations`,'success');
+  }catch(e){setStatus('Error: '+e.message,'error')}
 }
 
-// ══════════════════════════════════════
-//  HELPERS
-// ══════════════════════════════════════
-function fmtDur(m){const h=Math.floor(m/60),mi=Math.round(m%60);return h>0?`${h}h ${mi}m`:`${mi}m`}
-function enc(s){return encodeURIComponent(s)}
-
-// PWA
-if('serviceWorker' in navigator)
-  navigator.serviceWorker.register('/sw.js').catch(()=>{});
+// ═══════ PWA ═══════
+if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 </script>
 </body>
 </html>
