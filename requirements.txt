@@ -9,7 +9,7 @@ python-dotenv==1.0.1
 websockets==12.0
 
 # Database (optional)
-sqlalchemy[asyncio]==2.0.29
+sqlalchemy[asyncio]>=2.0.30
 asyncpg==0.30.0
 geoalchemy2==0.15.1
 
