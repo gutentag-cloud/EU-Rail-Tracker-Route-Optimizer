@@ -1,20 +1,16 @@
 """
-Graph-based route optimizer for the EU rail network.
-
-Algorithms:
-  • Dijkstra  – guaranteed shortest path
-  • A*        – faster with haversine heuristic
-  • k-shortest paths (Yen's) – alternative routes
-
-The graph is built dynamically from the station store +
-connections discovered via the API (cached).
+Graph-based route optimizer with multiple algorithms:
+  • Dijkstra  — guaranteed shortest path
+  • A*        — faster with haversine heuristic
+  • Pareto    — multi-criteria (time × transfers × distance)
 """
 
 from __future__ import annotations
 import heapq, json, os, math
 from typing import Optional
 from .models import (
-    Station, Coordinates, RouteSegment, OptimizedRoute,
+    Station, RouteSegment, OptimizedRoute,
+    ParetoRoute, ParetoResult,
 )
 from .station_store import StationStore, haversine
 
@@ -34,13 +30,12 @@ class Edge:
 
 
 class RailwayGraph:
-    """Weighted directed graph of the rail network."""
-
     def __init__(self, store: StationStore):
         self.store = store
         self.adj: dict[str, list[Edge]] = {}
 
-    # ── graph construction ────────────────────────────────
+    # ── graph construction ────────────────────────────
+
     def add_edge(self, from_id: str, to_id: str,
                  distance_km: float | None = None,
                  duration_min: float | None = None,
@@ -56,7 +51,6 @@ class RailwayGraph:
                 s2.coords.latitude, s2.coords.longitude,
             )
         if duration_min is None:
-            # estimate: ~100 km/h average rail speed
             duration_min = (distance_km / 100.0) * 60.0
 
         self.adj.setdefault(from_id, []).append(
@@ -68,10 +62,6 @@ class RailwayGraph:
             )
 
     def build_from_nearby(self, max_km: float = 120) -> int:
-        """
-        Connect every main station to others within max_km.
-        Produces a dense graph — good starting point.
-        """
         mains = self.store.main_stations()
         count = 0
         for i, s1 in enumerate(mains):
@@ -85,8 +75,8 @@ class RailwayGraph:
                     count += 1
         return count
 
-    def load_connections(self, path: str = CONNECTIONS_PATH) -> int:
-        """Load pre-built connections JSON."""
+    def load_connections(self,
+                         path: str = CONNECTIONS_PATH) -> int:
         if not os.path.exists(path):
             return 0
         with open(path) as f:
@@ -101,10 +91,10 @@ class RailwayGraph:
             count += 1
         return count
 
-    def save_connections(self, path: str = CONNECTIONS_PATH) -> None:
-        """Save current edges to JSON for caching."""
+    def save_connections(self,
+                         path: str = CONNECTIONS_PATH) -> None:
         conns = []
-        seen = set()
+        seen: set[tuple[str, str]] = set()
         for fid, edges in self.adj.items():
             for e in edges:
                 key = tuple(sorted([fid, e.to_id]))
@@ -120,18 +110,11 @@ class RailwayGraph:
         with open(path, "w") as f:
             json.dump(conns, f, indent=2)
 
-    # ── Dijkstra ──────────────────────────────────────────
-    def dijkstra(self, start_id: str, end_id: str,
-                 weight: str = "duration") -> Optional[OptimizedRoute]:
-        """
-        Shortest path by duration or distance.
-        weight: "duration" | "distance"
-        """
-        if start_id not in self.adj and start_id not in {
-            e.to_id for edges in self.adj.values() for e in edges
-        }:
-            return None
+    # ── Dijkstra ──────────────────────────────────────
 
+    def dijkstra(self, start_id: str, end_id: str,
+                 weight: str = "duration",
+                 ) -> Optional[OptimizedRoute]:
         dist: dict[str, float] = {start_id: 0.0}
         prev: dict[str, str] = {}
         pq: list[tuple[float, str]] = [(0.0, start_id)]
@@ -143,8 +126,8 @@ class RailwayGraph:
             if d > dist.get(u, math.inf):
                 continue
             for edge in self.adj.get(u, []):
-                w = edge.duration_min if weight == "duration" \
-                    else edge.distance_km
+                w = (edge.duration_min if weight == "duration"
+                     else edge.distance_km)
                 nd = d + w
                 if nd < dist.get(edge.to_id, math.inf):
                     dist[edge.to_id] = nd
@@ -153,11 +136,15 @@ class RailwayGraph:
 
         if end_id not in prev and start_id != end_id:
             return None
-        return self._build_route(start_id, end_id, prev)
+        route = self._build_route(start_id, end_id, prev)
+        route.algorithm = "dijkstra"
+        return route
 
-    # ── A* with haversine heuristic ───────────────────────
+    # ── A* ────────────────────────────────────────────
+
     def astar(self, start_id: str, end_id: str,
-              weight: str = "duration") -> Optional[OptimizedRoute]:
+              weight: str = "duration",
+              ) -> Optional[OptimizedRoute]:
         goal = self.store.get(end_id)
         if not goal:
             return None
@@ -171,7 +158,7 @@ class RailwayGraph:
                 goal.coords.latitude, goal.coords.longitude,
             )
             if weight == "duration":
-                return (d / 200.0) * 60.0   # optimistic 200 km/h
+                return (d / 200.0) * 60.0
             return d
 
         g: dict[str, float] = {start_id: 0.0}
@@ -187,19 +174,126 @@ class RailwayGraph:
                 continue
             closed.add(u)
             for edge in self.adj.get(u, []):
-                w = edge.duration_min if weight == "duration" \
-                    else edge.distance_km
+                w = (edge.duration_min if weight == "duration"
+                     else edge.distance_km)
                 ng = g[u] + w
                 if ng < g.get(edge.to_id, math.inf):
                     g[edge.to_id] = ng
                     prev[edge.to_id] = u
-                    heapq.heappush(pq, (ng + h(edge.to_id), edge.to_id))
+                    heapq.heappush(
+                        pq, (ng + h(edge.to_id), edge.to_id)
+                    )
 
         if end_id not in prev and start_id != end_id:
             return None
-        return self._build_route(start_id, end_id, prev)
+        route = self._build_route(start_id, end_id, prev)
+        route.algorithm = "astar"
+        return route
 
-    # ── reconstruct route ─────────────────────────────────
+    # ── Pareto Multi-Criteria ─────────────────────────
+
+    def pareto(self, start_id: str, end_id: str,
+               max_solutions: int = 10,
+               ) -> ParetoResult:
+        """
+        Find all Pareto-optimal routes considering:
+          - total duration (minutes)
+          - number of hops (proxy for transfers)
+          - total distance (km)
+
+        Uses label-setting algorithm with dominance pruning.
+        """
+
+        # Label: (duration, hops, distance, node_id, path)
+        Label = tuple[float, int, float, str, list[str]]
+
+        initial: Label = (0.0, 0, 0.0, start_id, [start_id])
+        pq: list[Label] = [initial]
+
+        # Best labels per node (Pareto set)
+        labels: dict[str, list[tuple[float, int, float]]] = {
+            start_id: [(0.0, 0, 0.0)],
+        }
+        solutions: list[Label] = []
+        explored = 0
+
+        def dominates(a: tuple, b: tuple) -> bool:
+            """a dominates b if a <= b in all and a < b in at least one."""
+            return (a[0] <= b[0] and a[1] <= b[1] and a[2] <= b[2] and
+                    (a[0] < b[0] or a[1] < b[1] or a[2] < b[2]))
+
+        while pq and len(solutions) < max_solutions * 3:
+            dur, hops, dist, uid, path = heapq.heappop(pq)
+            explored += 1
+
+            if uid == end_id:
+                # Check if dominated by existing solutions
+                obj = (dur, hops, dist)
+                if not any(dominates(
+                    (s[0], s[1], s[2]), obj
+                ) for s in solutions):
+                    solutions.append(
+                        (dur, hops, dist, uid, path)
+                    )
+                    # Remove dominated solutions
+                    solutions = [
+                        s for s in solutions
+                        if not dominates(obj, (s[0], s[1], s[2]))
+                        or s == (dur, hops, dist, uid, path)
+                    ]
+                continue
+
+            if explored > 50_000:
+                break
+
+            for edge in self.adj.get(uid, []):
+                if edge.to_id in path:  # no cycles
+                    continue
+                new_dur = dur + edge.duration_min
+                new_hops = hops + 1
+                new_dist = dist + edge.distance_km
+                new_obj = (new_dur, new_hops, new_dist)
+
+                # Check dominance against existing labels
+                existing = labels.get(edge.to_id, [])
+                if any(dominates(e, new_obj) for e in existing):
+                    continue
+
+                # Remove dominated labels
+                labels[edge.to_id] = [
+                    e for e in existing
+                    if not dominates(new_obj, e)
+                ]
+                labels[edge.to_id].append(new_obj)
+
+                new_path = path + [edge.to_id]
+                heapq.heappush(pq, (
+                    new_dur, new_hops, new_dist,
+                    edge.to_id, new_path,
+                ))
+
+        # Build ParetoResult
+        pareto_routes: list[ParetoRoute] = []
+        for dur, hops, dist, _, path in solutions[:max_solutions]:
+            route = self._build_route_from_path(path)
+            if route:
+                route.algorithm = "pareto"
+                pareto_routes.append(ParetoRoute(
+                    route=route,
+                    objectives={
+                        "duration_minutes": round(dur, 1),
+                        "transfers": hops - 1,
+                        "distance_km": round(dist, 1),
+                    },
+                ))
+
+        return ParetoResult(
+            routes=pareto_routes,
+            total_explored=explored,
+        )
+
+    # ── route reconstruction ──────────────────────────
+
     def _build_route(self, start_id: str, end_id: str,
                      prev: dict[str, str]) -> OptimizedRoute:
         path: list[str] = []
@@ -209,37 +303,51 @@ class RailwayGraph:
             cur = prev[cur]
         path.append(start_id)
         path.reverse()
+        return self._build_route_from_path(path) or OptimizedRoute(
+            segments=[], total_duration_minutes=0,
+            total_distance_km=0, num_stops=0,
+            path_station_ids=path,
+        )
 
+    def _build_route_from_path(self,
+                               path: list[str],
+                               ) -> Optional[OptimizedRoute]:
         segments: list[RouteSegment] = []
         total_dist = 0.0
         total_dur = 0.0
+
         for i in range(len(path) - 1):
             fid, tid = path[i], path[i + 1]
             edge = next(
-                (e for e in self.adj.get(fid, []) if e.to_id == tid),
+                (e for e in self.adj.get(fid, [])
+                 if e.to_id == tid),
                 None,
             )
             s1 = self.store.get(fid)
             s2 = self.store.get(tid)
             if edge and s1 and s2:
                 segments.append(RouteSegment(
-                    from_station=s1,
-                    to_station=s2,
+                    from_station=s1, to_station=s2,
                     duration_minutes=round(edge.duration_min, 1),
                     distance_km=round(edge.distance_km, 1),
                 ))
                 total_dist += edge.distance_km
                 total_dur += edge.duration_min
 
+        if not segments:
+            return None
+
         return OptimizedRoute(
             segments=segments,
             total_duration_minutes=round(total_dur, 1),
             total_distance_km=round(total_dist, 1),
             num_stops=len(path),
+            num_transfers=max(0, len(path) - 2),
             path_station_ids=path,
         )
 
-    # ── stats ─────────────────────────────────────────────
+    # ── stats ─────────────────────────────────────────
+
     @property
     def node_count(self) -> int:
         nodes = set(self.adj.keys())
