@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""
-Download the trainline-eu/stations open dataset.
-Source: https://github.com/trainline-eu/stations
-"""
+"""Download the trainline-eu/stations open dataset."""
 
 import os, urllib.request
 
@@ -10,7 +7,9 @@ URL = (
     "https://raw.githubusercontent.com/"
     "trainline-eu/stations/master/stations.csv"
 )
-DEST = os.path.join(os.path.dirname(__file__), "..", "data", "stations.csv")
+DEST = os.path.join(
+    os.path.dirname(__file__), "..", "data", "stations.csv"
+)
 
 
 def main():
@@ -22,7 +21,7 @@ def main():
         if resp != "y":
             return
 
-    print(f"⬇  Downloading stations.csv ...")
+    print("⬇  Downloading stations.csv ...")
     urllib.request.urlretrieve(URL, DEST)
     size = os.path.getsize(DEST)
     print(f"✅ Saved to {DEST} ({size:,} bytes)")
