@@ -1,10 +1,10 @@
 """
 Multi-operator European rail API client.
-Radar with automatic station-based fallback.
+Uses v5.db.transport.rest for radar + v6 for everything else.
 """
 
 from __future__ import annotations
-import asyncio, httpx, logging
+import httpx, logging, asyncio
 from datetime import datetime, timezone
 from typing import Optional
 from .models import (
@@ -36,9 +36,7 @@ PROFILES: dict[str, dict] = {
         "name": "ÖBB",
         "auth": {"type": "AID", "aid": "OWDL4fE4ixNiPBBm"},
         "client": {"id": "OEBB", "type": "WEB", "name": "oebb", "v": ""},
-        "ext": "OEBB.13",
-        "ver": "1.57",
-        "lang": "de",
+        "ext": "OEBB.13", "ver": "1.57", "lang": "de",
         "status": "beta",
     },
     "sncf": {
@@ -48,12 +46,14 @@ PROFILES: dict[str, dict] = {
         "auth": {"type": "AID", "aid": "n91dB8Z77MLdoR0K"},
         "client": {"id": "SNCF", "type": "WEB", "name": "webapp",
                    "l": "vs_webapp", "v": "2000000"},
-        "ext": "SNCF.1",
-        "ver": "1.46",
-        "lang": "fr",
+        "ext": "SNCF.1", "ver": "1.46", "lang": "fr",
         "status": "beta",
     },
 }
+
+# v5 has the radar endpoint, v6 does not
+DB_V5 = "https://v5.db.transport.rest"
+DB_V6 = "https://v6.db.transport.rest"
 
 
 class RailAPIClient:
@@ -66,7 +66,8 @@ class RailAPIClient:
         self.base = self.profile["base_url"]
         self.client = httpx.AsyncClient(
             timeout=timeout,
-            headers={"User-Agent": "EURailTracker/2.0 (github.com/gutentag-cloud)"},
+            headers={"User-Agent": "EURailTracker/2.0"},
+            follow_redirects=True,
         )
 
     async def close(self):
@@ -77,7 +78,7 @@ class RailAPIClient:
     # ══════════════════════════════════════════════════
 
     async def search_stations(self, query: str, limit: int = 8) -> list[Station]:
-        cached = await cache.get("stations", op=self.operator, q=query, l=limit)
+        cached = await cache.get("st", op=self.operator, q=query, l=limit)
         if cached:
             return [Station(**s) for s in cached]
         try:
@@ -90,12 +91,11 @@ class RailAPIClient:
             else:
                 result = []
         except Exception as e:
-            log.warning(f"{self.operator} search error: {e}")
+            log.debug(f"{self.operator} search error: {e}")
             result = []
         if result:
-            await cache.set("stations", [s.model_dump() for s in result],
-                            ttl=settings.cache_ttl_stations,
-                            op=self.operator, q=query, l=limit)
+            await cache.set("st", [s.model_dump() for s in result],
+                            ttl=3600, op=self.operator, q=query, l=limit)
         return result
 
     # ══════════════════════════════════════════════════
@@ -103,7 +103,7 @@ class RailAPIClient:
     # ══════════════════════════════════════════════════
 
     async def get_departures(self, stop_id: str, duration: int = 30) -> list[Departure]:
-        cached = await cache.get("departures", op=self.operator, sid=stop_id, d=duration)
+        cached = await cache.get("dep", op=self.operator, s=stop_id, d=duration)
         if cached:
             return [Departure(**d) for d in cached]
         try:
@@ -116,12 +116,11 @@ class RailAPIClient:
             else:
                 result = []
         except Exception as e:
-            log.warning(f"{self.operator} departures error for {stop_id}: {e}")
+            log.debug(f"{self.operator} departures error {stop_id}: {e}")
             result = []
         if result:
-            await cache.set("departures", [d.model_dump() for d in result],
-                            ttl=settings.cache_ttl_departures,
-                            op=self.operator, sid=stop_id, d=duration)
+            await cache.set("dep", [d.model_dump() for d in result],
+                            ttl=30, op=self.operator, s=stop_id, d=duration)
         return result
 
     # ══════════════════════════════════════════════════
@@ -129,7 +128,7 @@ class RailAPIClient:
     # ══════════════════════════════════════════════════
 
     async def get_trip(self, trip_id: str) -> Optional[Trip]:
-        cached = await cache.get("trip", op=self.operator, tid=trip_id)
+        cached = await cache.get("trip", op=self.operator, t=trip_id)
         if cached:
             return Trip(**cached)
         try:
@@ -138,86 +137,97 @@ class RailAPIClient:
             elif self.api_type == "hafas":
                 result = await self._hafas_trip(trip_id)
             else:
-                result = None
+                return None
         except Exception as e:
-            log.warning(f"{self.operator} trip error: {e}")
-            result = None
+            log.debug(f"{self.operator} trip error: {e}")
+            return None
         if result:
             await cache.set("trip", result.model_dump(),
-                            ttl=settings.cache_ttl_trips,
-                            op=self.operator, tid=trip_id)
+                            ttl=120, op=self.operator, t=trip_id)
         return result
 
     # ══════════════════════════════════════════════════
-    #  JOURNEY SEARCH (real timetable routing)
+    #  JOURNEY SEARCH (real timetable)
     # ══════════════════════════════════════════════════
 
     async def search_journeys(self, from_id: str, to_id: str,
                               results: int = 5) -> list[dict]:
-        """Search real connections with actual departure times."""
         try:
             if self.api_type == "rest":
                 return await self._rest_journeys(from_id, to_id, results)
             elif self.api_type == "rest_ch":
                 return await self._ch_journeys(from_id, to_id, results)
-            elif self.api_type == "hafas":
-                return await self._hafas_journeys(from_id, to_id, results)
         except Exception as e:
             log.warning(f"{self.operator} journey error: {e}")
         return []
 
     # ══════════════════════════════════════════════════
-    #  RADAR (bounding box trains)
+    #  RADAR (v5 DB API — has the endpoint)
     # ══════════════════════════════════════════════════
 
-    async def try_radar(self, north: float, south: float,
+    async def get_radar(self, north: float, south: float,
                         east: float, west: float) -> list[TrainPosition]:
-        """Try the DB radar API. Returns empty list on failure."""
-        if self.api_type != "rest":
-            return []
+        """Get trains in bounding box using v5 DB API radar."""
         try:
-            resp = await self.client.get(f"{self.base}/radar", params={
+            resp = await self.client.get(f"{DB_V5}/radar", params={
                 "north": north, "south": south,
                 "east": east, "west": west,
-                "duration": 30, "frames": 0,
-                "results": 256, "polylines": "false",
-                "language": "en",
+                "duration": 30, "frames": 1,
+                "results": 256,
             })
             if resp.status_code != 200:
-                log.debug(f"Radar returned {resp.status_code}")
                 return []
             data = resp.json()
-            movements = data if isinstance(data, list) else \
-                data.get("movements", data.get("journeys", []))
-            return self._parse_radar(movements)
-        except Exception as e:
-            log.debug(f"Radar failed: {e}")
+            if not isinstance(data, list):
+                data = data.get("movements", data.get("journeys", []))
+            return self._parse_radar_movements(data)
+        except Exception:
             return []
 
-    def _parse_radar(self, movements: list) -> list[TrainPosition]:
-        positions: list[TrainPosition] = []
+    def _parse_radar_movements(self, movements: list) -> list[TrainPosition]:
+        positions = []
+        seen_trips = set()
         for mov in movements:
             loc = mov.get("location") or {}
             lat, lon = loc.get("latitude"), loc.get("longitude")
             if lat is None or lon is None:
                 continue
-            line = mov.get("line") or {}
+
             trip_id = mov.get("tripId", "")
-            stopovers = mov.get("nextStopovers") or mov.get("stopovers") or []
+            if trip_id in seen_trips:
+                continue
+            seen_trips.add(trip_id)
+
+            line = mov.get("line") or {}
+            direction = mov.get("direction", "")
+
+            # Get station info from frames or stopovers
             prev_name, next_name = "", ""
-            for so in stopovers:
-                stop = so.get("stop") or {}
-                name = stop.get("name", "")
-                if so.get("departure") and not prev_name:
-                    prev_name = name
-                if so.get("arrival") and not next_name:
-                    next_name = name
-                if prev_name and next_name:
-                    break
+            frames = mov.get("frames", [])
+            if frames:
+                # v5 radar returns frames with origin/destination
+                frame = frames[0] if frames else {}
+                origin = frame.get("origin") or {}
+                dest = frame.get("destination") or {}
+                prev_name = origin.get("name", "")
+                next_name = dest.get("name", "")
+            else:
+                stopovers = mov.get("nextStopovers", mov.get("stopovers", []))
+                for so in stopovers:
+                    stop = so.get("stop") or {}
+                    name = stop.get("name", "")
+                    if so.get("departure") and not prev_name:
+                        prev_name = name
+                    elif so.get("arrival") and not next_name:
+                        next_name = name
+                    if prev_name and next_name:
+                        break
+
+            line_name = line.get("name") or line.get("productName") or "?"
             positions.append(TrainPosition(
                 trip_id=trip_id,
-                line_name=line.get("name", line.get("productName", "?")),
-                direction=mov.get("direction", ""),
+                line_name=line_name,
+                direction=direction,
                 coords=Coordinates(latitude=lat, longitude=lon),
                 speed_kmh=None,
                 prev_station=prev_name,
@@ -240,8 +250,15 @@ class RailAPIClient:
             try:
                 dep_t = datetime.fromisoformat(dep_str)
                 arr_t = datetime.fromisoformat(arr_str)
-            except ValueError:
+                # Make sure now is comparable
+                if dep_t.tzinfo and not now.tzinfo:
+                    now = now.replace(tzinfo=timezone.utc)
+                elif now.tzinfo and not dep_t.tzinfo:
+                    dep_t = dep_t.replace(tzinfo=timezone.utc)
+                    arr_t = arr_t.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
                 continue
+
             if dep_t <= now <= arr_t:
                 total = (arr_t - dep_t).total_seconds()
                 frac = (now - dep_t).total_seconds() / total if total > 0 else 0
@@ -264,11 +281,11 @@ class RailAPIClient:
         return None
 
     # ══════════════════════════════════════════════════
-    #  DB transport.rest implementations
+    #  DB transport.rest (v6)
     # ══════════════════════════════════════════════════
 
     async def _rest_search(self, query, limit):
-        resp = await self.client.get(f"{self.base}/locations", params={
+        resp = await self.client.get(f"{DB_V6}/locations", params={
             "query": query, "results": limit,
             "stops": "true", "addresses": "false", "poi": "false",
         })
@@ -290,7 +307,7 @@ class RailAPIClient:
 
     async def _rest_departures(self, stop_id, duration):
         resp = await self.client.get(
-            f"{self.base}/stops/{stop_id}/departures",
+            f"{DB_V6}/stops/{stop_id}/departures",
             params={"duration": duration, "results": 30},
         )
         resp.raise_for_status()
@@ -320,7 +337,7 @@ class RailAPIClient:
 
     async def _rest_trip(self, trip_id):
         resp = await self.client.get(
-            f"{self.base}/trips/{trip_id}",
+            f"{DB_V6}/trips/{trip_id}",
             params={"stopovers": "true", "polyline": "false"},
         )
         if resp.status_code != 200:
@@ -345,18 +362,16 @@ class RailAPIClient:
                     direction=data.get("direction", ""), stopovers=stopovers, operator="db")
 
     async def _rest_journeys(self, from_id, to_id, results):
-        resp = await self.client.get(f"{self.base}/journeys", params={
+        resp = await self.client.get(f"{DB_V6}/journeys", params={
             "from": from_id, "to": to_id, "results": results,
-            "stopovers": "true", "transferTime": 0,
-            "national": "true", "nationalExpress": "true",
-            "regional": "true", "regionalExpress": "true",
+            "stopovers": "true", "national": "true",
+            "nationalExpress": "true", "regional": "true",
+            "regionalExpress": "true",
         })
         resp.raise_for_status()
-        raw = resp.json()
-        return self._parse_journeys_rest(raw)
+        return self._parse_rest_journeys(resp.json())
 
-    def _parse_journeys_rest(self, raw: dict) -> list[dict]:
-        """Parse DB transport.rest journeys into a clean format."""
+    def _parse_rest_journeys(self, raw):
         journeys = []
         for j in raw.get("journeys", []):
             legs = []
@@ -371,46 +386,35 @@ class RailAPIClient:
                     s = so.get("stop") or {}
                     sl = s.get("location") or {}
                     stopovers.append({
-                        "name": s.get("name", ""),
-                        "lat": sl.get("latitude", 0),
-                        "lon": sl.get("longitude", 0),
-                        "arrival": so.get("arrival"),
-                        "departure": so.get("departure"),
-                        "arr_delay": so.get("arrivalDelay"),
-                        "dep_delay": so.get("departureDelay"),
+                        "name": s.get("name", ""), "id": str(s.get("id", "")),
+                        "lat": sl.get("latitude", 0), "lon": sl.get("longitude", 0),
+                        "arrival": so.get("arrival"), "departure": so.get("departure"),
+                        "arr_delay": so.get("arrivalDelay"), "dep_delay": so.get("departureDelay"),
                         "platform": so.get("arrivalPlatform") or so.get("departurePlatform"),
                     })
                 legs.append({
-                    "origin": origin.get("name", ""),
-                    "origin_lat": o_loc.get("latitude", 0),
-                    "origin_lon": o_loc.get("longitude", 0),
-                    "destination": dest.get("name", ""),
-                    "dest_lat": d_loc.get("latitude", 0),
-                    "dest_lon": d_loc.get("longitude", 0),
-                    "departure": leg.get("departure"),
-                    "arrival": leg.get("arrival"),
-                    "dep_delay": leg.get("departureDelay"),
-                    "arr_delay": leg.get("arrivalDelay"),
-                    "line": line.get("name", ""),
-                    "product": line.get("productName", ""),
+                    "origin": origin.get("name", ""), "origin_id": str(origin.get("id", "")),
+                    "origin_lat": o_loc.get("latitude", 0), "origin_lon": o_loc.get("longitude", 0),
+                    "destination": dest.get("name", ""), "dest_id": str(dest.get("id", "")),
+                    "dest_lat": d_loc.get("latitude", 0), "dest_lon": d_loc.get("longitude", 0),
+                    "departure": leg.get("departure"), "arrival": leg.get("arrival"),
+                    "dep_delay": leg.get("departureDelay"), "arr_delay": leg.get("arrivalDelay"),
+                    "line": line.get("name", ""), "product": line.get("productName", ""),
                     "direction": leg.get("direction", ""),
                     "platform": leg.get("departurePlatform"),
                     "walking": leg.get("walking", False),
                     "trip_id": leg.get("tripId", ""),
                     "stopovers": stopovers,
                 })
-            dep = j.get("legs", [{}])[0].get("departure")
-            arr = j.get("legs", [{}])[-1].get("arrival") if j.get("legs") else None
             journeys.append({
-                "legs": legs,
-                "transfers": len(legs) - 1,
-                "departure": dep,
-                "arrival": arr,
+                "legs": legs, "transfers": max(0, len(legs) - 1),
+                "departure": j.get("legs", [{}])[0].get("departure") if j.get("legs") else None,
+                "arrival": j.get("legs", [{}])[-1].get("arrival") if j.get("legs") else None,
             })
         return journeys
 
     # ══════════════════════════════════════════════════
-    #  SBB implementations
+    #  SBB
     # ══════════════════════════════════════════════════
 
     async def _ch_search(self, query, limit):
@@ -457,9 +461,8 @@ class RailAPIClient:
         resp = await self.client.get(f"{self.base}/connections",
                                      params={"from": from_id, "to": to_id, "limit": results})
         resp.raise_for_status()
-        raw = resp.json()
         journeys = []
-        for conn in raw.get("connections", []):
+        for conn in resp.json().get("connections", []):
             legs = []
             for sec in conn.get("sections", []):
                 dep = sec.get("departure") or {}
@@ -469,118 +472,110 @@ class RailAPIClient:
                 dep_co = dep_st.get("coordinate") or {}
                 arr_co = arr_st.get("coordinate") or {}
                 j = sec.get("journey") or {}
+                passList = sec.get("journey", {}).get("passList", [])
+                stopovers = []
+                for ps in passList:
+                    pst = ps.get("station") or {}
+                    pco = pst.get("coordinate") or {}
+                    stopovers.append({
+                        "name": pst.get("name", ""), "id": str(pst.get("id", "")),
+                        "lat": pco.get("y", 0), "lon": pco.get("x", 0),
+                        "arrival": ps.get("arrival"), "departure": ps.get("departure"),
+                    })
                 legs.append({
-                    "origin": dep_st.get("name", ""),
-                    "origin_lat": dep_co.get("y", 0),
-                    "origin_lon": dep_co.get("x", 0),
-                    "destination": arr_st.get("name", ""),
-                    "dest_lat": arr_co.get("y", 0),
-                    "dest_lon": arr_co.get("x", 0),
-                    "departure": dep.get("departure"),
-                    "arrival": arr.get("arrival"),
-                    "dep_delay": dep.get("delay"),
-                    "arr_delay": arr.get("delay"),
-                    "line": j.get("name", ""),
-                    "product": j.get("category", ""),
+                    "origin": dep_st.get("name", ""), "origin_id": str(dep_st.get("id", "")),
+                    "origin_lat": dep_co.get("y", 0), "origin_lon": dep_co.get("x", 0),
+                    "destination": arr_st.get("name", ""), "dest_id": str(arr_st.get("id", "")),
+                    "dest_lat": arr_co.get("y", 0), "dest_lon": arr_co.get("x", 0),
+                    "departure": dep.get("departure"), "arrival": arr.get("arrival"),
+                    "dep_delay": dep.get("delay"), "arr_delay": arr.get("delay"),
+                    "line": j.get("name", ""), "product": j.get("category", ""),
                     "direction": j.get("to", ""),
                     "platform": dep.get("platform"),
                     "walking": sec.get("walk") is not None,
-                    "trip_id": "",
-                    "stopovers": [],
+                    "trip_id": "", "stopovers": stopovers,
                 })
             journeys.append({
-                "legs": legs,
-                "transfers": max(0, len(legs) - 1),
+                "legs": legs, "transfers": max(0, len(legs) - 1),
                 "departure": conn.get("from", {}).get("departure"),
                 "arrival": conn.get("to", {}).get("arrival"),
             })
         return journeys
 
     # ══════════════════════════════════════════════════
-    #  HAFAS implementations (ÖBB, SNCF)
+    #  HAFAS (ÖBB, SNCF)
     # ══════════════════════════════════════════════════
 
-    def _hafas_body(self, method, req):
-        body = {
-            "id": "1", "ver": self.profile.get("ver", "1.46"),
-            "lang": self.profile.get("lang", "en"),
-            "auth": self.profile.get("auth", {}),
-            "client": self.profile.get("client", {}),
-            "formatted": False,
-            "svcReqL": [{"meth": method, "req": req}],
-        }
+    def _hbody(self, method, req):
+        body = {"id": "1", "ver": self.profile.get("ver", "1.46"),
+                "lang": self.profile.get("lang", "en"),
+                "auth": self.profile.get("auth", {}),
+                "client": self.profile.get("client", {}),
+                "formatted": False,
+                "svcReqL": [{"meth": method, "req": req}]}
         if self.profile.get("ext"):
             body["ext"] = self.profile["ext"]
         return body
 
-    def _hafas_parse(self, data):
+    def _hparse(self, data):
         svc = data.get("svcResL", [])
         if not svc:
             return None
         res = svc[0]
-        err = res.get("err")
-        if err and err != "OK":
-            log.warning(f"HAFAS {self.operator}: {err} — {res.get('errTxt', '')}")
+        if res.get("err") and res["err"] != "OK":
             return None
         return res.get("res", {})
 
     async def _hafas_search(self, query, limit):
-        body = self._hafas_body("LocMatch", {
-            "input": {"field": "S", "loc": {"name": query + "?"},
-                      "maxLoc": limit},
-        })
-        resp = await self.client.post(self.base, json=body)
+        resp = await self.client.post(self.base, json=self._hbody("LocMatch", {
+            "input": {"field": "S", "loc": {"name": query + "?"}, "maxLoc": limit},
+        }))
         resp.raise_for_status()
-        res = self._hafas_parse(resp.json())
+        res = self._hparse(resp.json())
         if not res:
             return []
         out = []
         for loc in res.get("match", {}).get("locL", []):
             crd = loc.get("crd", {})
-            lat = crd.get("y", 0) / 1_000_000
-            lon = crd.get("x", 0) / 1_000_000
+            lat, lon = crd.get("y", 0) / 1e6, crd.get("x", 0) / 1e6
             if not lat or not lon:
                 continue
             out.append(Station(
-                id=loc.get("extId", loc.get("lid", "")),
-                name=loc.get("name", ""),
+                id=loc.get("extId", ""), name=loc.get("name", ""),
                 coords=Coordinates(latitude=lat, longitude=lon),
                 db_id=loc.get("extId", ""), operator=self.operator,
             ))
         return out
 
     async def _hafas_departures(self, stop_id, duration):
-        body = self._hafas_body("StationBoard", {
-            "stbLoc": {"lid": f"A=1@L={stop_id}@"},
-            "type": "DEP", "dur": duration, "maxJny": 30,
-        })
-        resp = await self.client.post(self.base, json=body)
+        resp = await self.client.post(self.base, json=self._hbody("StationBoard", {
+            "stbLoc": {"lid": f"A=1@L={stop_id}@"}, "type": "DEP",
+            "dur": duration, "maxJny": 30,
+        }))
         resp.raise_for_status()
-        res = self._hafas_parse(resp.json())
+        res = self._hparse(resp.json())
         if not res:
             return []
         common = res.get("common", {})
-        prod_list = common.get("prodL", [])
-        loc_list = common.get("locL", [])
+        prods = common.get("prodL", [])
+        locs = common.get("locL", [])
         deps = []
         for jny in res.get("jnyL", []):
             stb = jny.get("stbStop", {})
             pi = jny.get("prodX", 0)
-            prod = prod_list[pi] if pi < len(prod_list) else {}
+            prod = prods[pi] if pi < len(prods) else {}
             li = stb.get("locX", 0)
-            loc = loc_list[li] if li < len(loc_list) else {}
+            loc = locs[li] if li < len(locs) else {}
             crd = loc.get("crd", {})
-            planned = stb.get("dTimeS", "")
-            date_str = jny.get("date", "")
             deps.append(Departure(
                 trip_id=jny.get("jid", ""),
                 line_name=prod.get("name", "?"),
                 direction=jny.get("dirTxt", ""),
-                planned_time=f"{date_str}T{planned}" if planned else "",
+                planned_time=f"{jny.get('date','')}T{stb.get('dTimeS','')}" if stb.get("dTimeS") else "",
                 station=Station(
                     id=loc.get("extId", stop_id), name=loc.get("name", ""),
-                    coords=Coordinates(latitude=crd.get("y", 0) / 1_000_000,
-                                       longitude=crd.get("x", 0) / 1_000_000),
+                    coords=Coordinates(latitude=crd.get("y", 0) / 1e6,
+                                       longitude=crd.get("x", 0) / 1e6),
                     operator=self.operator,
                 ),
                 platform=stb.get("dPlatfS"), operator=self.operator,
@@ -588,62 +583,48 @@ class RailAPIClient:
         return deps
 
     async def _hafas_trip(self, trip_id):
-        body = self._hafas_body("JourneyDetails", {
+        resp = await self.client.post(self.base, json=self._hbody("JourneyDetails", {
             "jid": trip_id, "getPolyline": False,
-        })
-        resp = await self.client.post(self.base, json=body)
+        }))
         if resp.status_code != 200:
             return None
-        res = self._hafas_parse(resp.json())
+        res = self._hparse(resp.json())
         if not res:
             return None
         common = res.get("common", {})
-        loc_list = common.get("locL", [])
-        prod_list = common.get("prodL", [])
+        locs = common.get("locL", [])
+        prods = common.get("prodL", [])
         journey = res.get("journey", {})
         date_str = journey.get("date", "")
         stopovers = []
         for stop in journey.get("stopL", []):
             li = stop.get("locX", 0)
-            loc = loc_list[li] if li < len(loc_list) else {}
+            loc = locs[li] if li < len(locs) else {}
             crd = loc.get("crd", {})
-            arr = stop.get("aTimeS", "")
-            dep = stop.get("dTimeS", "")
+            a, d = stop.get("aTimeS", ""), stop.get("dTimeS", "")
             stopovers.append(Stopover(
                 station=Station(
                     id=loc.get("extId", ""), name=loc.get("name", ""),
-                    coords=Coordinates(latitude=crd.get("y", 0) / 1_000_000,
-                                       longitude=crd.get("x", 0) / 1_000_000),
+                    coords=Coordinates(latitude=crd.get("y", 0) / 1e6,
+                                       longitude=crd.get("x", 0) / 1e6),
                     operator=self.operator,
                 ),
-                arrival=f"{date_str}T{arr}" if arr else None,
-                departure=f"{date_str}T{dep}" if dep else None,
+                arrival=f"{date_str}T{a}" if a else None,
+                departure=f"{date_str}T{d}" if d else None,
             ))
         pi = journey.get("prodX", 0)
-        prod = prod_list[pi] if pi < len(prod_list) else {}
+        prod = prods[pi] if pi < len(prods) else {}
         return Trip(id=trip_id, line_name=prod.get("name", ""),
                     direction=journey.get("dirTxt", ""),
                     stopovers=stopovers, operator=self.operator)
 
-    async def _hafas_journeys(self, from_id, to_id, results):
-        body = self._hafas_body("TripSearch", {
-            "depLocL": [{"lid": f"A=1@L={from_id}@", "type": "S"}],
-            "arrLocL": [{"lid": f"A=1@L={to_id}@", "type": "S"}],
-            "maxChg": 5, "numF": results, "getPolyline": False,
-        })
-        resp = await self.client.post(self.base, json=body)
-        resp.raise_for_status()
-        # Return raw HAFAS for now
-        return []
 
-
-# ── factory ──────────────────────────────────────────
 _clients: dict[str, RailAPIClient] = {}
 
-def get_client(operator: str = "db") -> RailAPIClient:
-    if operator not in _clients:
-        _clients[operator] = RailAPIClient(operator)
-    return _clients[operator]
+def get_client(op: str = "db") -> RailAPIClient:
+    if op not in _clients:
+        _clients[op] = RailAPIClient(op)
+    return _clients[op]
 
 async def close_all_clients():
     for c in _clients.values():
