@@ -1,4 +1,4 @@
-# 🚆 EU Rail Tracker & Route Optimizer
+# 🚆 EU Rail Tracker & Route Optimizer (Developing)
 
 A real-time European train tracker and route optimization platform built with open data and open-source tools. Track live trains on a map, find optimal routes using graph algorithms, and analyze delays across the EU rail network.
 
